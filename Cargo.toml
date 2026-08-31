@@ -81,6 +81,11 @@ toml = "0.8"
 directories = "6"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
 
+# cargo-dist builds with `--profile dist`. `dist init` would have written this.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [workspace.lints.rust]
 unused = "warn"
 
