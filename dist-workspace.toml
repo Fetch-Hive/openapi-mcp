@@ -20,3 +20,9 @@ targets = [
   "aarch64-apple-darwin",
   "x86_64-pc-windows-msvc",
 ]
+
+# cargo-dist 0.28 still emits ubuntu-20.04, which GitHub retired.
+[dist.github-custom-runners]
+global = "ubuntu-22.04"
+x86_64-unknown-linux-musl = "ubuntu-22.04"
+aarch64-unknown-linux-musl = "ubuntu-22.04"
