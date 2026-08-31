@@ -21,6 +21,10 @@ mcp-gateway upgrade [--version X.Y.Z] [--dry-run]
 ```
 
 `inspect` with no name (or `inspect config`) prints the config path.
+`inspect NAME` (no `--tool`) lists compiled MCP tool names as a table. Names are
+snake_cased from the OpenAPI `operationId` (`getInventory` → `get_inventory`),
+not the literal id. `inspect NAME --tool TOOL` and `mcp-gateway test NAME TOOL`
+require that compiled name.
 `--follow` on `logs` is not implemented and exits 1.
 
 Global flags: `--config PATH`, `-v`/`--verbose`, `-q`/`--quiet`, `--json`,

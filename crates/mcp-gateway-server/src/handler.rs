@@ -15,7 +15,7 @@ use rmcp::RoleServer;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::warn;
+use tracing::{info, warn};
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -139,6 +139,7 @@ impl GatewayHandler {
     }
 
     async fn execute_operation(&self, op: &Operation, arguments: Value) -> ToolResult {
+        let started = std::time::Instant::now();
         if let Err(msg) = tokio::time::timeout(SCHEMA_BUDGET, async {
             validate_schema(&op.tool.input_schema, &arguments)
         })
@@ -162,7 +163,15 @@ impl GatewayHandler {
             )
             .await
         {
-            Ok(upstream) => map_success(&upstream, mcp_gateway_proxy::ResponseKind::Json, None),
+            Ok(upstream) => {
+                info!(
+                    tool = %op.tool.name,
+                    status = upstream.status,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "upstream ok"
+                );
+                map_success(&upstream, mcp_gateway_proxy::ResponseKind::Json, None)
+            }
             Err(e) => {
                 if !matches!(e, ProxyError::Ssrf(_)) {
                     warn!(error = %e, tool = %op.tool.name, "upstream call failed");
@@ -198,6 +207,7 @@ impl ServerHandler for GatewayHandler {
             .and_then(|c| c.parse::<usize>().ok())
             .unwrap_or(0);
         let ops: Vec<&Operation> = self.gateway.operations().collect();
+        info!(method = "tools/list", tools = ops.len(), "mcp request");
         let end = (start + PAGE_SIZE).min(ops.len());
         let page = ops[start.min(ops.len())..end]
             .iter()
@@ -217,6 +227,7 @@ impl ServerHandler for GatewayHandler {
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let arguments = Value::Object(request.arguments.unwrap_or_default());
+        info!(method = "tools/call", tool = %request.name, "mcp request");
         let mapped = self.execute_named(&request.name, arguments).await;
         Ok(tool_result_to_mcp(&mapped).into())
     }

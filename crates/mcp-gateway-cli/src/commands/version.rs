@@ -23,10 +23,11 @@ pub fn run(out: &Output) -> Result<ExitCode, CliError> {
             "target": target,
             "rustls": true,
             "musl": musl,
+            "maker": "Fetch Hive",
         }));
         return Ok(ExitCode::Ok);
     }
-    out.line(&format!("mcp-gateway {version}"));
+    out.heading(&format!("mcp-gateway {version}"));
     out.line(&format!("ir {}", mcp_gateway_ir::IR_VERSION));
     out.line("mcp 2026-07-28");
     out.line(&format!("commit {commit}"));
@@ -35,5 +36,6 @@ pub fn run(out: &Output) -> Result<ExitCode, CliError> {
         "rustls yes  musl {}",
         if musl { "yes" } else { "no" }
     ));
+    out.line("by Fetch Hive · https://fetchhive.com");
     Ok(ExitCode::Ok)
 }

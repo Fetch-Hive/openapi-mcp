@@ -1,10 +1,19 @@
 use crate::cli::{ColorMode, Globals};
 use serde::Serialize;
+use std::io::IsTerminal;
+
+const RESET: &str = "\x1b[0m";
+const BOLD: &str = "\x1b[1m";
+const GREEN: &str = "\x1b[32m";
+const YELLOW: &str = "\x1b[33m";
+const RED: &str = "\x1b[31m";
+const DIM: &str = "\x1b[2m";
 
 pub struct Output {
     pub json: bool,
     pub quiet: bool,
     pub verbose: u8,
+    styled: bool,
 }
 
 impl Output {
@@ -14,11 +23,67 @@ impl Output {
             ColorMode::Never => std::env::set_var("NO_COLOR", "1"),
             ColorMode::Auto => {}
         }
+        let styled = match globals.color {
+            ColorMode::Always => !globals.json,
+            ColorMode::Never => false,
+            ColorMode::Auto => {
+                !globals.json
+                    && std::io::stdout().is_terminal()
+                    && std::env::var_os("NO_COLOR").is_none()
+            }
+        };
         Self {
             json: globals.json,
             quiet: globals.quiet,
             verbose: globals.verbose,
+            styled,
         }
+    }
+
+    fn paint(&self, code: &str, text: &str) -> String {
+        if self.styled {
+            format!("{code}{text}{RESET}")
+        } else {
+            text.to_string()
+        }
+    }
+
+    pub fn bold(&self, text: &str) -> String {
+        self.paint(BOLD, text)
+    }
+
+    pub fn dim(&self, text: &str) -> String {
+        self.paint(DIM, text)
+    }
+
+    pub fn heading(&self, text: &str) {
+        self.line(&self.bold(text));
+    }
+
+    pub fn status_tag(&self, status: &str) -> String {
+        let padded = format!("{status:<4}");
+        let tag = format!("[{padded}]");
+        match status {
+            "ok" => self.paint(GREEN, &tag),
+            "warn" => self.paint(YELLOW, &tag),
+            "fail" => self.paint(RED, &tag),
+            _ => tag,
+        }
+    }
+
+    pub fn ok(&self, msg: &str) {
+        let prefix = self.paint(GREEN, "✓");
+        self.line(&format!("{prefix} {msg}"));
+    }
+
+    pub fn warn(&self, msg: &str) {
+        let prefix = self.paint(YELLOW, "!");
+        self.line(&format!("{prefix} {msg}"));
+    }
+
+    pub fn fail(&self, msg: &str) {
+        let prefix = self.paint(RED, "✗");
+        self.line(&format!("{prefix} {msg}"));
     }
 
     pub fn line(&self, msg: &str) {

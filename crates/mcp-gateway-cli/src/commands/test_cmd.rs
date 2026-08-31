@@ -48,12 +48,12 @@ pub async fn run(
         return Err(CliError::policy(result.text.clone()));
     }
     if result.is_error {
-        out.line("isError: true");
+        out.fail("isError: true");
         out.line(&format!("error: {}", result.text));
         out.line(&format!("hint: mcp-gateway auth list {name}"));
         return Err(CliError::upstream(result.text));
     }
-    out.line(&format!("upstream ok  {ms}ms"));
+    out.ok(&format!("upstream ok  {ms}ms"));
     out.line("isError: false");
     let preview = if result.text.len() > 1024 {
         format!("{}…", &result.text[..1024])

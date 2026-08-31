@@ -223,7 +223,8 @@ fn version_json() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"ir\""))
-        .stdout(predicate::str::contains("2026-07-28"));
+        .stdout(predicate::str::contains("2026-07-28"))
+        .stdout(predicate::str::contains("Fetch Hive"));
 }
 
 #[test]
@@ -257,7 +258,6 @@ fn doctor_offline_with_token() {
             "--offline",
         ])
         .assert()
-        .success()
         .get_output()
         .stdout
         .clone();
@@ -450,6 +450,35 @@ fn inspect_client_claude() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"command\": \"mcp-gateway\""));
+}
+
+#[test]
+fn inspect_lists_compiled_tool_names() {
+    let (_dir, cfg, _) = primed();
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "inspect", "petstore"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("list_pets"))
+        .stdout(predicate::str::contains("GET"))
+        .stdout(predicate::str::contains("/pets"));
+}
+
+#[test]
+fn inspect_json_includes_tool_names() {
+    let (_dir, cfg, _) = primed();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "--json",
+            "inspect",
+            "petstore",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"tool_names\""))
+        .stdout(predicate::str::contains("list_pets"));
 }
 
 #[test]

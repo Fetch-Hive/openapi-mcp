@@ -8,12 +8,13 @@ use crate::CliError;
 use mcp_gateway_server::{
     parse_bind, serve_http, serve_stdio, validate_http_serve, HttpServeOptions,
 };
+use tracing_subscriber::EnvFilter;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
     paths: &PlatformPaths,
     globals: &Globals,
-    _out: &Output,
+    out: &Output,
     name: String,
     stdio: bool,
     bind: Option<String>,
@@ -24,20 +25,22 @@ pub async fn run(
     allow_insecure_http: bool,
 ) -> Result<ExitCode, CliError> {
     let cfg = load_cfg(paths)?;
+    init_tracing(&cfg.log.level);
     let spec = cfg.spec(&name)?.clone();
     let handler = handler_for(globals, &cfg, &spec, paths, allow_insecure_http, None)?;
     let tools = handler.gateway.operations().count();
     let allow_private = globals.allow_private_networks || cfg.ssrf.allow_private_networks;
     if stdio {
-        eprintln!(
-            "mcp-gateway {} stdio  spec={name} tools={tools} ssrf={}",
+        out.err_line(&format!(
+            "{} {} stdio  spec={name} tools={tools} ssrf={}",
+            out.bold("mcp-gateway"),
             env!("CARGO_PKG_VERSION"),
             if allow_private {
                 "private-networks"
             } else {
                 "public-internet"
             }
-        );
+        ));
         serve_stdio(handler)
             .await
             .map_err(|e| CliError::io(e.to_string()))?;
@@ -57,39 +60,46 @@ pub async fn run(
     validate_http_serve(addr, expose, anon, token.as_deref(), &path)
         .map_err(|e| CliError::usage(e.to_string()))?;
 
-    let banner_lines = [
-        format!(
-            "mcp-gateway {}  ir=1.0  mcp=2026-07-28",
-            env!("CARGO_PKG_VERSION")
-        ),
-        format!("config: {}", paths.config_file.display()),
-        format!("spec:   {name}  tools={tools}"),
-        format!(
-            "auth:   {}",
-            if anon {
-                "anonymous (loopback)"
-            } else {
-                "MCP bearer required (env MCP_GATEWAY_TOKEN)"
-            }
-        ),
-        format!(
-            "ssrf:   {}",
-            if allow_private {
-                "private networks allowed (system resolver; metadata still denied)"
-            } else {
-                "public-internet defaults (private networks denied)"
-            }
-        ),
-        format!("transport: streamable-http  bind={addr}  path={path}"),
-        format!("listening. clients: see `mcp-gateway inspect {name} --client cursor`"),
-        mcp_gateway_upsell::serve_boot_banner(),
-    ];
-    for line in &banner_lines {
-        println!("{line}");
-    }
+    out.heading(&format!(
+        "mcp-gateway {}  ir=1.0  mcp=2026-07-28",
+        env!("CARGO_PKG_VERSION")
+    ));
+    out.line(&format!(
+        "{} {}",
+        out.bold("config:"),
+        paths.config_file.display()
+    ));
+    out.line(&format!("{} {name}  tools={tools}", out.bold("spec:")));
+    out.line(&format!(
+        "{} {}",
+        out.bold("auth:"),
+        if anon {
+            "anonymous (loopback)"
+        } else {
+            "MCP bearer required (env MCP_GATEWAY_TOKEN)"
+        }
+    ));
+    out.line(&format!(
+        "{} {}",
+        out.bold("ssrf:"),
+        if allow_private {
+            "private networks allowed (system resolver; metadata still denied)"
+        } else {
+            "public-internet defaults (private networks denied)"
+        }
+    ));
+    out.line(&format!(
+        "{} streamable-http  bind={addr}  path={path}",
+        out.bold("transport:")
+    ));
+    out.line(&out.dim("────────"));
+    out.line(&format!(
+        "listening. clients: see `mcp-gateway inspect {name} --client cursor`"
+    ));
+    out.line(&mcp_gateway_upsell::serve_boot_banner());
     if allow_private {
-        eprintln!(
-            "warning: --allow-private-networks is on; this process can reach RFC1918/ULA targets."
+        out.err_line(
+            "warning: --allow-private-networks is on; this process can reach RFC1918/ULA targets.",
         );
     }
 
@@ -106,4 +116,16 @@ pub async fn run(
     .await
     .map_err(|e| CliError::io(e.to_string()))?;
     Ok(ExitCode::Ok)
+}
+
+fn init_tracing(level: &str) {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let fallback = if level.is_empty() { "info" } else { level };
+        EnvFilter::new(fallback)
+    });
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .try_init();
 }

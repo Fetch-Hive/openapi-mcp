@@ -78,8 +78,8 @@ pub async fn add(
             .iter()
             .map(|w| format!("{:?}", w.code))
             .collect();
-        out.line(&format!(
-            "  warnings: {}  ({})",
+        out.warn(&format!(
+            "warnings: {}  ({})",
             bundle.report.warnings.len(),
             codes.join(", ")
         ));
@@ -111,13 +111,33 @@ pub async fn add(
         }));
         return Ok(ExitCode::Ok);
     }
-    out.line(&format!("Wrote spec [{name}] to config"));
+    out.ok(&format!("Wrote spec [{name}] to config"));
     out.line(&format!("Cached IR sha256:{pin}… at {}", ir_path.display()));
+    let tool_names: Vec<&str> = bundle
+        .api
+        .operations
+        .iter()
+        .map(|op| op.tool.name.as_str())
+        .collect();
+    out.line(&format!("tools: {}", preview_tool_names(&tool_names, 8)));
+    out.line(&format!(
+        "      mcp-gateway inspect {name} lists every compiled name"
+    ));
     out.line(&format!(
         "Next: mcp-gateway auth add {name} --type bearer --from-env PETSTORE_TOKEN"
     ));
     out.line(&format!("      mcp-gateway serve {name}"));
     Ok(ExitCode::Ok)
+}
+
+fn preview_tool_names(names: &[&str], max: usize) -> String {
+    if names.is_empty() {
+        return "(none)".into();
+    }
+    if names.len() <= max {
+        return names.join(", ");
+    }
+    format!("{}, …", names[..max].join(", "))
 }
 
 async fn check_spec_url(
@@ -152,7 +172,7 @@ pub fn list(paths: &PlatformPaths, out: &Output) -> Result<ExitCode, CliError> {
         out.json_value(&cfg.specs);
         return Ok(ExitCode::Ok);
     }
-    out.line("NAME       SPECS  TOOLS  AUTH     LAST SERVE");
+    out.line(&out.bold("NAME       SPECS  TOOLS  AUTH     LAST SERVE"));
     for spec in &cfg.specs {
         let tools = ir_cache::find_cached(&paths.cache_dir, &spec.name)
             .and_then(|p| ir_cache::load_bundle(&p).ok())
@@ -253,19 +273,55 @@ pub fn inspect(
         ));
         return Ok(ExitCode::Ok);
     }
+    let tool_names: Vec<&str> = bundle
+        .api
+        .operations
+        .iter()
+        .map(|op| op.tool.name.as_str())
+        .collect();
     if out.json {
         out.json_value(&serde_json::json!({
             "name": spec.name,
             "title": bundle.api.gateway.title,
             "tools": bundle.api.operations.len(),
+            "tool_names": tool_names,
             "warnings": bundle.report.warnings.len(),
             "ir_version": bundle.api.ir_version,
         }));
         return Ok(ExitCode::Ok);
     }
-    out.line(&format!("spec: {}", spec.name));
-    out.line(&format!("title: {}", bundle.api.gateway.title));
-    out.line(&format!("tools: {}", bundle.api.operations.len()));
-    out.line(&format!("warnings: {}", bundle.report.warnings.len()));
+    out.line(&format!("{} {}", out.bold("spec:"), spec.name));
+    out.line(&format!(
+        "{} {}",
+        out.bold("title:"),
+        bundle.api.gateway.title
+    ));
+    out.line(&format!(
+        "{} {}",
+        out.bold("tools:"),
+        bundle.api.operations.len()
+    ));
+    out.line(&format!(
+        "{} {}",
+        out.bold("warnings:"),
+        bundle.report.warnings.len()
+    ));
+    out.line("");
+    let name_width = tool_names.iter().map(|n| n.len()).max().unwrap_or(4).max(4);
+    out.line(&out.bold(&format!(
+        "{:<name_width$}  {:<6}  PATH",
+        "NAME",
+        "METHOD",
+        name_width = name_width
+    )));
+    for op in &bundle.api.operations {
+        out.line(&format!(
+            "{:<name_width$}  {:<6}  {}",
+            op.tool.name,
+            op.source.method,
+            op.source.path_template,
+            name_width = name_width
+        ));
+    }
     Ok(ExitCode::Ok)
 }

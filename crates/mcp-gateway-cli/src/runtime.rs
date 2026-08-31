@@ -13,13 +13,13 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 pub fn ssrf_policy(globals: &Globals, cfg: &GatewayConfig, allow_insecure: bool) -> SsrfPolicy {
-    let mut policy = SsrfPolicy::default()
+    let policy = SsrfPolicy::default()
         .with_private_networks(globals.allow_private_networks || cfg.ssrf.allow_private_networks)
         .with_metadata(globals.allow_metadata || cfg.ssrf.allow_metadata)
         .with_allow_insecure_http(allow_insecure || cfg.ssrf.allow_insecure_http);
     #[cfg(debug_assertions)]
     if std::env::var("MCP_GATEWAY_TEST_ALLOW_LOOPBACK").as_deref() == Ok("1") {
-        policy = policy
+        return policy
             .with_allow_loopback(true)
             .with_allow_insecure_http(true);
     }

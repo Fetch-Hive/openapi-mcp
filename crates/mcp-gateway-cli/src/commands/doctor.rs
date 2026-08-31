@@ -277,11 +277,16 @@ fn finish(out: &Output, checks: Vec<Check>) -> Result<ExitCode, CliError> {
             "fail": fails,
         }));
     } else {
-        out.line(&format!("mcp-gateway doctor {}", env!("CARGO_PKG_VERSION")));
+        out.heading(&format!("mcp-gateway doctor {}", env!("CARGO_PKG_VERSION")));
         for c in &checks {
-            out.line(&format!("[{:<4}] {:<18} {}", c.status, c.name, c.detail));
+            out.line(&format!(
+                "{} {:<18} {}",
+                out.status_tag(c.status),
+                c.name,
+                c.detail
+            ));
         }
-        out.line(&format!("doctor: {oks} ok, {warns} warn, {fails} fail"));
+        out.line(&out.bold(&format!("doctor: {oks} ok, {warns} warn, {fails} fail")));
     }
     if fails > 0 {
         Ok(ExitCode::Policy)

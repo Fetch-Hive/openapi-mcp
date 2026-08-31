@@ -1,5 +1,7 @@
 # mcp-gateway
 
+_An open-source project by [Fetch Hive](https://fetchhive.com)._
+
 Turn an OpenAPI document into a local MCP server.
 
 `mcp-gateway` compiles OpenAPI 3.0/3.1 to a versioned IR, serves tools over
@@ -14,11 +16,12 @@ https://fetchhive.com/mcp
 Order: Homebrew → Docker → npx → curl|sh → cargo.
 
 ```bash
-# Homebrew (after Fetch-Hive/homebrew-tap exists)
+# Homebrew — use the fully qualified name (Homebrew 6 trusts only this formula).
+# `brew tap` then `brew install mcp-gateway` is refused until you `brew trust`.
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.1.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.2.0 version
 
 # npx (optionalDependencies, no postinstall)
 npx --yes @fetch-hive/mcp-gateway version
@@ -37,6 +40,8 @@ mcp-gateway init
 mcp-gateway add-spec --name demo --file ./openapi.yaml
 # or: mcp-gateway add-spec --name demo --url https://petstore3.swagger.io/api/v3/openapi.json
 export MCP_GATEWAY_TOKEN=…   # printed once by init
+mcp-gateway inspect demo     # lists compiled tool names (snake_case from operationId)
+mcp-gateway test demo get_inventory --args '{}'
 mcp-gateway serve demo
 mcp-gateway doctor
 ```
