@@ -7,6 +7,7 @@ use crate::runtime::handler_for;
 use crate::CliError;
 use std::time::Instant;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     paths: &PlatformPaths,
     globals: &Globals,
@@ -15,10 +16,11 @@ pub async fn run(
     tool: String,
     args: String,
     timeout: u64,
+    base_url: Option<String>,
 ) -> Result<ExitCode, CliError> {
     let cfg = load_cfg(paths)?;
     let spec = cfg.spec(&name)?.clone();
-    let handler = handler_for(globals, &cfg, &spec, paths, false, None)?;
+    let handler = handler_for(globals, &cfg, &spec, paths, false, base_url.as_deref())?;
     let arguments: serde_json::Value = serde_json::from_str(&args)
         .map_err(|e| CliError::usage(format!("--args is not JSON: {e}")))?;
     let op = handler

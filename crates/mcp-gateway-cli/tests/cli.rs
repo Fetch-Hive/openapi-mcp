@@ -7,7 +7,11 @@ use std::thread;
 use tempfile::TempDir;
 
 fn bin() -> Command {
-    Command::cargo_bin("mcp-gateway").unwrap()
+    let mut cmd = Command::cargo_bin("mcp-gateway").unwrap();
+    // Debug-only hooks; must not leak from the operator's shell into CLI tests.
+    cmd.env_remove("MCP_GATEWAY_TEST_BASE_URL")
+        .env_remove("MCP_GATEWAY_TEST_ALLOW_LOOPBACK");
+    cmd
 }
 
 fn primed() -> (TempDir, std::path::PathBuf, String) {
@@ -530,6 +534,115 @@ fn mcp_gateway_test_hits_loopback_echo() {
             "{}",
             "--timeout",
             "5",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("isError: false"));
+    let _ = handle.join();
+}
+
+#[test]
+fn test_relative_servers_need_base_url() {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "init"])
+        .assert()
+        .success();
+    let spec = dir.path().join("rel.yaml");
+    fs::copy("tests/fixtures/tiny-relative.yaml", &spec).unwrap();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "add-spec",
+            "--name",
+            "rel",
+            "--file",
+            spec.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "test",
+            "rel",
+            "list_pets",
+            "--args",
+            "{}",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("relative"));
+}
+
+#[test]
+fn test_base_url_flag_hits_loopback() {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "init"])
+        .assert()
+        .success();
+    let spec = dir.path().join("rel.yaml");
+    fs::copy("tests/fixtures/tiny-relative.yaml", &spec).unwrap();
+    let (port, handle) = spawn_echo();
+    let origin = format!("http://127.0.0.1:{port}");
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "add-spec",
+            "--name",
+            "rel",
+            "--file",
+            spec.to_str().unwrap(),
+            "--base-url",
+            &origin,
+        ])
+        .assert()
+        .success();
+    bin()
+        .env("MCP_GATEWAY_TEST_ALLOW_LOOPBACK", "1")
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "test",
+            "rel",
+            "list_pets",
+            "--args",
+            "{}",
+            "--timeout",
+            "5",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("isError: false"));
+    let _ = handle.join();
+}
+
+#[test]
+fn test_cli_base_url_overrides_without_persisted_spec_field() {
+    let (_dir, cfg, _) = primed();
+    let (port, handle) = spawn_echo();
+    let origin = format!("http://127.0.0.1:{port}");
+    bin()
+        .env("MCP_GATEWAY_TEST_ALLOW_LOOPBACK", "1")
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "test",
+            "petstore",
+            "list_pets",
+            "--args",
+            "{}",
+            "--timeout",
+            "5",
+            "--base-url",
+            &origin,
         ])
         .assert()
         .success()

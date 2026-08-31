@@ -53,15 +53,7 @@ pub fn render(
     if origin.host_str().is_none() {
         return Err(ProxyError::OpenRedirect);
     }
-    let joined = origin
-        .join(
-            &path
-                .strip_prefix('/')
-                .map(|p| format!("/{p}"))
-                .unwrap_or(path.clone()),
-        )
-        .or_else(|_| origin.join(&path))
-        .map_err(|_| ProxyError::OpenRedirect)?;
+    let joined = join_openapi_server(&origin, &path)?;
     if joined.host_str() != origin.host_str() || joined.scheme() != origin.scheme() {
         return Err(ProxyError::OpenRedirect);
     }
@@ -236,6 +228,29 @@ fn encode_body(binding: &BodyBinding, arguments: &Value) -> Result<Vec<u8>, Prox
     }
 }
 
+/// OpenAPI server URL + operation path: append, do not RFC 3986-replace.
+/// `https://host/api/v3` + `/store/inventory` → `https://host/api/v3/store/inventory`.
+fn join_openapi_server(origin: &Url, op_path: &str) -> Result<Url, ProxyError> {
+    let mut joined = origin.clone();
+    let base_path = origin.path().trim_end_matches('/');
+    let op = if op_path.starts_with('/') {
+        op_path
+    } else {
+        return Err(ProxyError::Schema("path".into()));
+    };
+    let new_path = if op == "/" {
+        if base_path.is_empty() {
+            "/".to_owned()
+        } else {
+            base_path.to_owned()
+        }
+    } else {
+        format!("{base_path}{op}")
+    };
+    joined.set_path(&new_path);
+    Ok(joined)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,5 +312,19 @@ mod tests {
         plan.path_params.clear();
         let err = render("https://api.example.com", &plan, &json!({"id": "abc"})).unwrap_err();
         assert!(matches!(err, ProxyError::Schema(_)));
+    }
+
+    #[test]
+    fn appends_path_to_server_prefix() {
+        let req = render(
+            "https://petstore3.swagger.io/api/v3",
+            &plan_get(),
+            &json!({"id": "1"}),
+        )
+        .unwrap();
+        assert_eq!(
+            req.url.as_str(),
+            "https://petstore3.swagger.io/api/v3/v1/widgets/1"
+        );
     }
 }

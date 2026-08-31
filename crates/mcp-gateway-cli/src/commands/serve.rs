@@ -23,13 +23,22 @@ pub async fn run(
     allow_anonymous: bool,
     token_file: Option<std::path::PathBuf>,
     allow_insecure_http: bool,
+    base_url: Option<String>,
 ) -> Result<ExitCode, CliError> {
     let cfg = load_cfg(paths)?;
     init_tracing(&cfg.log.level);
     let spec = cfg.spec(&name)?.clone();
-    let handler = handler_for(globals, &cfg, &spec, paths, allow_insecure_http, None)?;
+    let handler = handler_for(
+        globals,
+        &cfg,
+        &spec,
+        paths,
+        allow_insecure_http,
+        base_url.as_deref(),
+    )?;
     let tools = handler.gateway.operations().count();
     let allow_private = globals.allow_private_networks || cfg.ssrf.allow_private_networks;
+    let upstream = handler.gateway.base_url.clone();
     if stdio {
         out.err_line(&format!(
             "{} {} stdio  spec={name} tools={tools} ssrf={}",
@@ -70,6 +79,7 @@ pub async fn run(
         paths.config_file.display()
     ));
     out.line(&format!("{} {name}  tools={tools}", out.bold("spec:")));
+    out.line(&format!("{} {upstream}", out.bold("upstream:")));
     out.line(&format!(
         "{} {}",
         out.bold("auth:"),

@@ -5,6 +5,7 @@ use crate::names;
 use crate::parse;
 use crate::refs::Retriever;
 use crate::safety::SafetyOpts;
+use crate::server_url::resolve_server_url;
 use mcp_gateway_ir::*;
 use std::time::Instant;
 
@@ -108,11 +109,25 @@ pub fn compile_loaded(
         .pointer("/info/description")
         .and_then(serde_json::Value::as_str)
         .map(str::to_owned);
-    let servers = doc
+    let document_url = match loaded.source.kind {
+        SourceKind::Url => Some(loaded.source.locator.as_str()),
+        SourceKind::File | SourceKind::Stdin => None,
+    };
+    let mut servers: Vec<Server> = doc
         .get("servers")
         .and_then(serde_json::Value::as_array)
         .map(|a| a.iter().filter_map(lower::parse_server).collect())
         .unwrap_or_default();
+    if servers.is_empty() && document_url.is_some() {
+        servers.push(Server {
+            url_template: "/".into(),
+            variables: Default::default(),
+            description: None,
+        });
+    }
+    for server in &mut servers {
+        server.url_template = resolve_server_url(document_url, &server.url_template);
+    }
 
     let compile_ms = started.elapsed().as_millis() as u64;
 

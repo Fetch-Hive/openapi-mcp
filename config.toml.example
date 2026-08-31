@@ -27,6 +27,7 @@ level = "info"
 # [[specs]]
 # name = "petstore"
 # url = "https://petstore3.swagger.io/api/v3/openapi.json"
+# base_url = "https://petstore3.swagger.io/api/v3"  # optional; overrides relative servers
 # ir_pin = "9f3c…"
 # enabled_tools = []
 # disabled_tools = []

@@ -31,6 +31,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
             name,
             url,
             file,
+            base_url,
             insecure_http,
             force,
         } => {
@@ -41,6 +42,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
                 name,
                 url,
                 file,
+                base_url,
                 insecure_http,
                 force,
             )
@@ -60,6 +62,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
             allow_anonymous,
             token_file,
             allow_insecure_http,
+            base_url,
         } => {
             serve::run(
                 &paths,
@@ -73,6 +76,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
                 allow_anonymous,
                 token_file,
                 allow_insecure_http,
+                base_url,
             )
             .await
         }
@@ -84,7 +88,20 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
             tool,
             args,
             timeout,
-        } => test_cmd::run(&paths, &cli.globals, out, name, tool, args, timeout).await,
+            base_url,
+        } => {
+            test_cmd::run(
+                &paths,
+                &cli.globals,
+                out,
+                name,
+                tool,
+                args,
+                timeout,
+                base_url,
+            )
+            .await
+        }
         Commands::Logs {
             follow,
             since,

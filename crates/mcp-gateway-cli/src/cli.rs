@@ -66,6 +66,9 @@ pub enum Commands {
         url: Option<String>,
         #[arg(long)]
         file: Option<PathBuf>,
+        /// Absolute upstream origin. Required when the spec is a file and `servers` is relative.
+        #[arg(long)]
+        base_url: Option<String>,
         #[arg(long)]
         insecure_http: bool,
         #[arg(long)]
@@ -101,6 +104,9 @@ pub enum Commands {
         token_file: Option<PathBuf>,
         #[arg(long)]
         allow_insecure_http: bool,
+        /// Absolute upstream origin. Overrides OpenAPI `servers` for this process.
+        #[arg(long)]
+        base_url: Option<String>,
     },
     /// Run local health checks.
     Doctor {
@@ -116,6 +122,9 @@ pub enum Commands {
         args: String,
         #[arg(long, default_value_t = 30)]
         timeout: u64,
+        /// Absolute upstream origin. Overrides OpenAPI `servers` for this call.
+        #[arg(long)]
+        base_url: Option<String>,
     },
     /// Read the local JSON log file.
     Logs {

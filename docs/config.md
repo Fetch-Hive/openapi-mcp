@@ -21,3 +21,7 @@ Platform paths:
 | Windows | `%APPDATA%\mcp-gateway\config.toml` | `%LOCALAPPDATA%\mcp-gateway\ir` |
 
 `$MCP_GATEWAY_CONFIG` and `--config` override the config path.
+
+`[[specs]].url` is the OpenAPI document URL. Relative `servers` entries are
+resolved against it. `[[specs]].base_url` (optional) is an absolute upstream
+origin that overrides `servers` for `test` and `serve`.

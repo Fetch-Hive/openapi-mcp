@@ -4,6 +4,7 @@ use crate::ir_cache;
 use crate::paths::PlatformPaths;
 use crate::secrets::SecretRef;
 use crate::CliError;
+use mcp_gateway_compile::{is_absolute_http_url, resolve_server_url};
 use mcp_gateway_ir::CompileBundle;
 use mcp_gateway_proxy::ssrf::{HickoryResolver, Resolver, SystemResolver};
 use mcp_gateway_proxy::{InjectedCredential, SsrfPolicy};
@@ -70,6 +71,7 @@ pub fn load_bundle_for_spec(
 
 pub fn base_url(bundle: &CompileBundle, override_url: Option<&str>) -> Result<String, CliError> {
     if let Some(url) = override_url {
+        require_absolute_http(url)?;
         return Ok(url.to_owned());
     }
     let server = bundle
@@ -84,6 +86,44 @@ pub fn base_url(bundle: &CompileBundle, override_url: Option<&str>) -> Result<St
         }
     }
     Ok(url)
+}
+
+/// CLI `--base-url`, then spec.base_url, then IR servers resolved against spec.url.
+pub fn upstream_base_url(
+    bundle: &CompileBundle,
+    spec: &SpecEntry,
+    override_url: Option<&str>,
+) -> Result<String, CliError> {
+    let mut chosen = override_url.map(str::to_owned);
+    #[cfg(debug_assertions)]
+    if chosen.is_none() {
+        chosen = std::env::var("MCP_GATEWAY_TEST_BASE_URL").ok();
+    }
+    if chosen.is_none() {
+        chosen = spec.base_url.clone();
+    }
+    let raw = base_url(bundle, chosen.as_deref())?;
+    if is_absolute_http_url(&raw) {
+        return Ok(raw);
+    }
+    let resolved = resolve_server_url(spec.url.as_deref(), &raw);
+    require_absolute_http(&resolved).map_err(|_| {
+        CliError::usage(format!(
+            "upstream server URL {raw:?} is relative; pass --base-url https://host/api \
+(or re-run add-spec with --url so it can be resolved against the OpenAPI document)"
+        ))
+    })?;
+    Ok(resolved)
+}
+
+fn require_absolute_http(url: &str) -> Result<(), CliError> {
+    if is_absolute_http_url(url) {
+        Ok(())
+    } else {
+        Err(CliError::usage(
+            "--base-url must be an absolute http(s) URL (host + scheme)",
+        ))
+    }
 }
 
 pub fn injected_credential(
@@ -169,20 +209,8 @@ pub fn handler_for(
     let (bundle, _) = load_bundle_for_spec(paths, cfg, spec)?;
     let policy = ssrf_policy(globals, cfg, allow_insecure);
     let resolver = resolver(&policy)?;
-    let base = {
-        #[cfg(debug_assertions)]
-        {
-            std::env::var("MCP_GATEWAY_TEST_BASE_URL")
-                .ok()
-                .or_else(|| base_override.map(ToOwned::to_owned))
-        }
-        #[cfg(not(debug_assertions))]
-        {
-            base_override.map(ToOwned::to_owned)
-        }
-    };
     let gateway = Arc::new(LocalGateway {
-        base_url: base_url(&bundle, base.as_deref())?,
+        base_url: upstream_base_url(&bundle, spec, base_override)?,
         credential: injected_credential(spec.upstream.as_ref())?,
         ssrf: policy,
         enabled_tools: spec.enabled_tools.clone(),

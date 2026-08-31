@@ -12,6 +12,7 @@ mod normalize;
 mod parse;
 mod refs;
 mod safety;
+mod server_url;
 mod style;
 
 pub use compile::{compile, compile_loaded, compile_path, compile_with, CompileOptions};
@@ -21,6 +22,7 @@ pub use names::{candidate_name, normalize as normalize_name, uniquify, NameSourc
 pub use safety::{
     check_host, is_blocked_ip, parse_https_url, resolve_and_check, SafetyError, SafetyOpts,
 };
+pub use server_url::{is_absolute_http_url, resolve_server_url};
 
 pub use mcp_gateway_ir::{CompileBundle, IR_VERSION};
 

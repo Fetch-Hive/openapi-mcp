@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Tiny Relative
+  version: "1.0.0"
+servers:
+  - url: /v1
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      tags: [pets]
+      summary: List pets
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { type: object } }

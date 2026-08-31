@@ -101,6 +101,9 @@ pub struct SpecEntry {
     pub url: Option<String>,
     #[serde(default)]
     pub file: Option<String>,
+    /// Absolute upstream origin. Overrides a relative OpenAPI `servers` URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
     #[serde(default)]
     pub ir_pin: Option<String>,
     #[serde(default)]

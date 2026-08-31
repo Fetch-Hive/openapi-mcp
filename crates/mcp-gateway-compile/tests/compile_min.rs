@@ -256,3 +256,34 @@ paths:
     assert!(!bundle.api.operations[0].enabled_by_default);
     assert!(bundle.api.operations[0].destructive);
 }
+
+#[test]
+fn url_source_resolves_relative_servers() {
+    let yaml = br#"
+openapi: 3.1.0
+info: { title: t, version: "1" }
+servers:
+  - url: /api/v3
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+"#;
+    let loaded = mcp_gateway_compile::load_bytes(
+        yaml.to_vec(),
+        mcp_gateway_ir::SourceKind::Url,
+        "https://petstore3.swagger.io/api/v3/openapi.json",
+    )
+    .unwrap();
+    let bundle = mcp_gateway_compile::compile_loaded(&loaded, Default::default()).unwrap();
+    assert_eq!(
+        bundle.api.servers[0].url_template,
+        "https://petstore3.swagger.io/api/v3"
+    );
+}

@@ -21,7 +21,7 @@ Order: Homebrew → Docker → npx → curl|sh → cargo.
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.2.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.3.0 version
 
 # npx (optionalDependencies, no postinstall)
 npx --yes @fetch-hive/mcp-gateway version
@@ -39,6 +39,8 @@ cargo install --path crates/mcp-gateway-cli
 mcp-gateway init
 mcp-gateway add-spec --name demo --file ./openapi.yaml
 # or: mcp-gateway add-spec --name demo --url https://petstore3.swagger.io/api/v3/openapi.json
+# Relative OpenAPI `servers` URLs are resolved against the document URL.
+# Local files with a relative server need: --base-url https://host/api
 export MCP_GATEWAY_TOKEN=…   # printed once by init
 mcp-gateway inspect demo     # lists compiled tool names (snake_case from operationId)
 mcp-gateway test demo get_inventory --args '{}'

@@ -5,16 +5,16 @@ Generated from clap. Hidden Phase 1 aliases (`compile`, `list-tools`, `call`,
 
 ```text
 mcp-gateway init [--force] [--bind ADDR] [--allow-private-networks]
-mcp-gateway add-spec --name NAME (--url HTTPS_URL | --file PATH)
+mcp-gateway add-spec --name NAME (--url HTTPS_URL | --file PATH) [--base-url URL]
 mcp-gateway list [--json]
 mcp-gateway inspect [NAME] [--tool TOOL] [--client cursor|claude|vscode|chatgpt]
 mcp-gateway auth add NAME --type none|bearer|basic|api_key_header|api_key_query|custom_headers
              (--from-env VAR | --from-file PATH)
 mcp-gateway auth list [NAME]
 mcp-gateway auth remove NAME
-mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous]
+mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--base-url URL]
 mcp-gateway doctor [NAME] [--offline] [--json]
-mcp-gateway test NAME TOOL [--args JSON] [--timeout SECS]
+mcp-gateway test NAME TOOL [--args JSON] [--timeout SECS] [--base-url URL]
 mcp-gateway logs [--since RFC3339] [--tool TOOL]
 mcp-gateway version [--json]
 mcp-gateway upgrade [--version X.Y.Z] [--dry-run]
@@ -25,6 +25,12 @@ mcp-gateway upgrade [--version X.Y.Z] [--dry-run]
 snake_cased from the OpenAPI `operationId` (`getInventory` → `get_inventory`),
 not the literal id. `inspect NAME --tool TOOL` and `mcp-gateway test NAME TOOL`
 require that compiled name.
+
+Relative OpenAPI `servers` URLs (Petstore's `/api/v3`) are resolved against the
+spec document URL when you `add-spec --url`. Already-cached IR is resolved the
+same way at `test`/`serve` if the spec entry still has `url`. For a local file
+whose `servers` entry is relative, pass `--base-url https://host/api` on
+`add-spec`, `test`, or `serve`.
 `--follow` on `logs` is not implemented and exits 1.
 
 Global flags: `--config PATH`, `-v`/`--verbose`, `-q`/`--quiet`, `--json`,

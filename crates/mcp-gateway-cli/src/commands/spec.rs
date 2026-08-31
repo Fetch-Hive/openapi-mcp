@@ -6,7 +6,7 @@ use crate::exit::ExitCode;
 use crate::ir_cache;
 use crate::output::Output;
 use crate::paths::PlatformPaths;
-use crate::runtime::{resolver, ssrf_policy};
+use crate::runtime::{resolver, ssrf_policy, upstream_base_url};
 use crate::CliError;
 use mcp_gateway_compile::{compile_with, CompileOptions, SafetyOpts, SpecSource};
 use mcp_gateway_proxy::ssrf::pin_url;
@@ -21,6 +21,7 @@ pub async fn add(
     name: String,
     url: Option<String>,
     file: Option<PathBuf>,
+    base_url: Option<String>,
     insecure_http: bool,
     force: bool,
 ) -> Result<ExitCode, CliError> {
@@ -29,6 +30,13 @@ pub async fn add(
         return Err(CliError::usage(format!(
             "spec {name} already exists; pass --force to replace"
         )));
+    }
+    if let Some(base) = base_url.as_deref() {
+        if !mcp_gateway_compile::is_absolute_http_url(base) {
+            return Err(CliError::usage(
+                "--base-url must be an absolute http(s) URL (host + scheme)",
+            ));
+        }
     }
     let source = match (url.as_deref(), file.as_deref()) {
         (Some(u), None) => {
@@ -96,6 +104,7 @@ pub async fn add(
         name: name.clone(),
         url,
         file: file.map(|p| p.display().to_string()),
+        base_url: base_url.clone(),
         ir_pin: Some(pin.clone()),
         enabled_tools: vec![],
         disabled_tools: vec![],
@@ -113,6 +122,11 @@ pub async fn add(
     }
     out.ok(&format!("Wrote spec [{name}] to config"));
     out.line(&format!("Cached IR sha256:{pin}… at {}", ir_path.display()));
+    let upstream_preview = base_url
+        .as_deref()
+        .or_else(|| bundle.api.servers.first().map(|s| s.url_template.as_str()))
+        .unwrap_or("(none)");
+    out.line(&format!("upstream: {upstream_preview}"));
     let tool_names: Vec<&str> = bundle
         .api
         .operations
@@ -283,6 +297,7 @@ pub fn inspect(
         out.json_value(&serde_json::json!({
             "name": spec.name,
             "title": bundle.api.gateway.title,
+            "upstream": upstream_base_url(&bundle, spec, None).ok(),
             "tools": bundle.api.operations.len(),
             "tool_names": tool_names,
             "warnings": bundle.report.warnings.len(),
@@ -296,6 +311,20 @@ pub fn inspect(
         out.bold("title:"),
         bundle.api.gateway.title
     ));
+    match upstream_base_url(&bundle, spec, None) {
+        Ok(u) => out.line(&format!("{} {u}", out.bold("upstream:"))),
+        Err(_) => {
+            let raw = bundle
+                .api
+                .servers
+                .first()
+                .map(|s| s.url_template.as_str())
+                .unwrap_or("(none)");
+            out.warn(&format!(
+                "upstream: {raw}  (relative; pass --base-url or add-spec --url)"
+            ));
+        }
+    }
     out.line(&format!(
         "{} {}",
         out.bold("tools:"),
