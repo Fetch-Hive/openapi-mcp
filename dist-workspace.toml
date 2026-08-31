@@ -1,10 +1,13 @@
+[workspace]
+members = ["cargo:."]
+
 [dist]
 cargo-dist-version = "0.28.0"
 ci = ["github"]
-installers = ["shell", "powershell", "homebrew", "npm"]
+installers = ["shell", "powershell", "homebrew"]
 tap = "Fetch-Hive/homebrew-tap"
-publish-jobs = ["homebrew", "npm"]
-npm-scope = "@fetch-hive"
+publish-jobs = ["homebrew"]
+formula = "mcp-gateway"
 github-attestations = true
 unix-archive = ".tar.xz"
 windows-archive = ".zip"
@@ -17,6 +20,3 @@ targets = [
   "aarch64-apple-darwin",
   "x86_64-pc-windows-msvc",
 ]
-
-[dist.bin]
-mcp-gateway = { crate = "mcp-gateway-cli" }
