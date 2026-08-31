@@ -141,6 +141,13 @@ pub struct CustomHeaderRef {
 }
 
 impl GatewayConfig {
+    pub fn blank() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            ..Self::default()
+        }
+    }
+
     pub fn load(path: &Path) -> Result<Self, CliError> {
         let raw = fs::read_to_string(path)
             .map_err(|e| CliError::usage(format!("cannot read {}: {e}", path.display())))?;

@@ -154,7 +154,7 @@ fn preview_tool_names(names: &[&str], max: usize) -> String {
     format!("{}, …", names[..max].join(", "))
 }
 
-async fn check_spec_url(
+pub(crate) async fn check_spec_url(
     raw: &str,
     globals: &Globals,
     cfg: &GatewayConfig,

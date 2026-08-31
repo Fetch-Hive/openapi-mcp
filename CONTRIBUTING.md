@@ -34,3 +34,18 @@ or trimmed excerpts.
   multi-tenant control-plane, quota, or dashboard glue here.
 - Do not weaken the default SSRF policy. Private-network access is
   `--allow-private-networks` behind the `self-host` Cargo feature.
+
+## Release
+
+Before you commit a version bump:
+
+```bash
+./scripts/bump-version.sh 0.5.0
+```
+
+That sets `[workspace.package] version`, rewrites workspace crate versions in
+`Cargo.lock`, and retags `ghcr.io/fetch-hive/mcp-gateway` in `README.md`,
+`docker/compose.yaml`, `docker/cloud-init.yaml`, and `render.yaml`. Then commit,
+push `main`, tag `vX.Y.Z` (cargo-dist builds the GitHub Release), and publish
+the matching GHCR image. `./scripts/bump-version.sh --dry-run 0.5.0` prints the
+plan without writing.

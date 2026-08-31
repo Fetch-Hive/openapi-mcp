@@ -10,7 +10,9 @@ fn bin() -> Command {
     let mut cmd = Command::cargo_bin("mcp-gateway").unwrap();
     // Debug-only hooks; must not leak from the operator's shell into CLI tests.
     cmd.env_remove("MCP_GATEWAY_TEST_BASE_URL")
-        .env_remove("MCP_GATEWAY_TEST_ALLOW_LOOPBACK");
+        .env_remove("MCP_GATEWAY_TEST_ALLOW_LOOPBACK")
+        .env_remove("PORT")
+        .env_remove("MCP_GATEWAY_SPEC_URL");
     cmd
 }
 
@@ -290,6 +292,8 @@ fn serve_stdio_initialize_and_list_tools() {
 
     let exe = assert_cmd::cargo::cargo_bin("mcp-gateway");
     let mut child = std::process::Command::new(&exe)
+        .env_remove("PORT")
+        .env_remove("MCP_GATEWAY_SPEC_URL")
         .args([
             "--config",
             cfg.to_str().unwrap(),
@@ -537,7 +541,8 @@ fn mcp_gateway_test_hits_loopback_echo() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("isError: false"));
+        .stdout(predicate::str::contains("isError: false"))
+        .stdout(predicate::str::contains(format!("http://127.0.0.1:{port}")));
     let _ = handle.join();
 }
 
@@ -648,4 +653,100 @@ fn test_cli_base_url_overrides_without_persisted_spec_field() {
         .success()
         .stdout(predicate::str::contains("isError: false"));
     let _ = handle.join();
+}
+
+#[test]
+fn serve_unknown_spec_without_url_fails() {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "init"])
+        .assert()
+        .success();
+    bin()
+        .env("MCP_GATEWAY_TOKEN", "fh_mcp_live_dummy")
+        .args(["--config", cfg.to_str().unwrap(), "serve", "demo"])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("unknown spec"));
+}
+
+#[test]
+fn serve_bootstraps_url_through_ssrf() {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .env("MCP_GATEWAY_TOKEN", "fh_mcp_live_dummy")
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "serve",
+            "demo",
+            "--url",
+            "https://metadata.google.internal/openapi.json",
+        ])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("spec URL rejected"));
+    assert!(
+        !cfg.exists(),
+        "failed SSRF must not write a config before compile"
+    );
+}
+
+#[test]
+fn serve_bootstraps_spec_url_env_through_ssrf() {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "init"])
+        .assert()
+        .success();
+    bin()
+        .env("MCP_GATEWAY_TOKEN", "fh_mcp_live_dummy")
+        .env(
+            "MCP_GATEWAY_SPEC_URL",
+            "https://metadata.google.internal/openapi.json",
+        )
+        .args(["--config", cfg.to_str().unwrap(), "serve", "missing"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("spec URL rejected"));
+}
+
+#[test]
+fn serve_port_env_listens_all_interfaces() {
+    let (_dir, cfg, token) = primed();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+
+    let exe = assert_cmd::cargo::cargo_bin("mcp-gateway");
+    let mut child = std::process::Command::new(&exe)
+        .env("MCP_GATEWAY_TOKEN", &token)
+        .env("PORT", port.to_string())
+        .env_remove("MCP_GATEWAY_SPEC_URL")
+        .args(["--config", cfg.to_str().unwrap(), "serve", "petstore"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(4);
+    let mut connected = false;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            connected = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(
+        connected,
+        "serve should honor PORT={port} (config bind is 127.0.0.1:8787)"
+    );
 }

@@ -1,0 +1,7 @@
+# Cedar container stack. Fir apps cannot use Deploy buttons.
+# Start args only — ENTRYPOINT is /usr/local/bin/mcp-gateway (distroless, no shell).
+build:
+  docker:
+    web: docker/Dockerfile
+run:
+  web: serve demo

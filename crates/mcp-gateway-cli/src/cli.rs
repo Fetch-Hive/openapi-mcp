@@ -107,6 +107,10 @@ pub enum Commands {
         /// Absolute upstream origin. Overrides OpenAPI `servers` for this process.
         #[arg(long)]
         base_url: Option<String>,
+        /// HTTPS OpenAPI document URL. Used when NAME is not in config (PaaS bootstrap).
+        /// Overrides $MCP_GATEWAY_SPEC_URL.
+        #[arg(long)]
+        url: Option<String>,
     },
     /// Run local health checks.
     Doctor {

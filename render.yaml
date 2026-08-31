@@ -1,0 +1,23 @@
+# https://render.com/docs/blueprint-spec
+# Deploy button: https://render.com/deploy?repo=https://github.com/Fetch-Hive/openapi-mcp
+services:
+  - type: web
+    name: mcp-gateway
+    runtime: image
+    image:
+      url: ghcr.io/fetch-hive/mcp-gateway:0.4.0
+    dockerCommand: serve demo
+    autoDeployTrigger: off
+    envVars:
+      - key: MCP_GATEWAY_TOKEN
+        generateValue: true
+      - key: MCP_GATEWAY_SPEC_URL
+        sync: false
+      - key: MCP_GATEWAY_CONFIG
+        value: /data/config.toml
+      - key: HOME
+        value: /data
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

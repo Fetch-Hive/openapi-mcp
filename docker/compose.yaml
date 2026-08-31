@@ -1,7 +1,10 @@
-# Example compose for a local MCP Gateway. TLS is the reverse proxy's job.
+# Example compose for a local or VPS MCP Gateway. TLS is the reverse proxy's job.
+# Image is amd64 musl. Distroless nonroot is uid 65532 — chown named volumes
+# (`docker run --rm -v gateway-data:/data busybox chown 65532:65532 /data`)
+# if `serve` cannot write config.
 services:
   mcp-gateway:
-    image: ghcr.io/fetch-hive/mcp-gateway:0.1.0
+    image: ghcr.io/fetch-hive/mcp-gateway:0.4.0
     read_only: true
     cap_drop:
       - ALL
@@ -10,7 +13,16 @@ services:
     ports:
       - "127.0.0.1:8787:8787"
     environment:
+      PORT: "8787"
+      HOME: /data
+      MCP_GATEWAY_CONFIG: /data/config.toml
       MCP_GATEWAY_TOKEN: ${MCP_GATEWAY_TOKEN:?set a non-empty MCP_GATEWAY_TOKEN}
+      MCP_GATEWAY_SPEC_URL: ${MCP_GATEWAY_SPEC_URL:-}
+    tmpfs:
+      - /tmp
     volumes:
-      - ./config.toml:/config/config.toml:ro
-    command: ["serve", "demo", "--config", "/config/config.toml", "--bind", "0.0.0.0:8787", "--expose"]
+      - gateway-data:/data
+    command: ["serve", "demo"]
+
+volumes:
+  gateway-data:

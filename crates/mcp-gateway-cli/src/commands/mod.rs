@@ -63,6 +63,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
             token_file,
             allow_insecure_http,
             base_url,
+            url,
         } => {
             serve::run(
                 &paths,
@@ -77,6 +78,7 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
                 token_file,
                 allow_insecure_http,
                 base_url,
+                url,
             )
             .await
         }

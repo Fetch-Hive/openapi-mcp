@@ -1,0 +1,22 @@
+# Deploy to DigitalOcean button:
+# https://cloud.digitalocean.com/apps/new?repo=https://github.com/Fetch-Hive/openapi-mcp/tree/main
+# The button requires a top-level `spec:` wrapper.
+spec:
+  name: mcp-gateway
+  services:
+    - name: web
+      dockerfile_path: docker/Dockerfile
+      github:
+        repo: Fetch-Hive/openapi-mcp
+        branch: main
+        deploy_on_push: false
+      http_port: 8080
+      instance_count: 1
+      instance_size_slug: basic-xxs
+      run_command: serve demo
+      envs:
+        - key: MCP_GATEWAY_TOKEN
+          scope: RUN_TIME
+          type: SECRET
+        - key: MCP_GATEWAY_SPEC_URL
+          scope: RUN_TIME

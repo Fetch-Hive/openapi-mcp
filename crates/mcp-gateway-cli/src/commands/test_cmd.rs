@@ -28,10 +28,14 @@ pub async fn run(
         .operation(&tool)
         .ok_or_else(|| CliError::usage(format!("unknown tool {tool}")))?;
     let timeout = std::time::Duration::from_secs(timeout.max(1));
+    let target =
+        mcp_gateway_proxy::render(&handler.gateway.base_url, &op.execution_plan, &arguments)
+            .map(|r| r.url.to_string())
+            .unwrap_or_else(|_| op.source.path_template.clone());
     out.line(&format!(
         "calling {} {}  (SSRF pinned, timeout {}s)",
         op.source.method,
-        op.source.path_template,
+        target,
         timeout.as_secs()
     ));
     let start = Instant::now();
@@ -52,7 +56,11 @@ pub async fn run(
     if result.is_error {
         out.fail("isError: true");
         out.line(&format!("error: {}", result.text));
-        out.line(&format!("hint: mcp-gateway auth list {name}"));
+        if result.error_code.as_deref() == Some("upstream_5xx") {
+            out.line("hint: HTTP 5xx came from the upstream API, not mcp-gateway");
+        } else if result.text.contains("HTTP 401") || result.text.contains("HTTP 403") {
+            out.line(&format!("hint: mcp-gateway auth list {name}"));
+        }
         return Err(CliError::upstream(result.text));
     }
     out.ok(&format!("upstream ok  {ms}ms"));

@@ -22,6 +22,13 @@ Platform paths:
 
 `$MCP_GATEWAY_CONFIG` and `--config` override the config path.
 
+PaaS (`serve` on Heroku / Render / DigitalOcean): if `--bind` is omitted and
+`PORT` is set, the process listens on `0.0.0.0:$PORT` with `--expose` (the
+image is distroless, so `$PORT` cannot be interpolated in `CMD`). If `NAME` is
+not in config, `serve --url` or `$MCP_GATEWAY_SPEC_URL` compiles that HTTPS
+OpenAPI document first. Bearer tokens stay in `$MCP_GATEWAY_TOKEN`, never in
+TOML. See [deploy](deploy/README.md).
+
 `[[specs]].url` is the OpenAPI document URL. Relative `servers` entries are
 resolved against it. `[[specs]].base_url` (optional) is an absolute upstream
 origin that overrides `servers` for `test` and `serve`.

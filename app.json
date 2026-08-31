@@ -1,0 +1,19 @@
+{
+  "name": "mcp-gateway",
+  "description": "Open-source MCP Gateway: compile an OpenAPI document and serve Streamable HTTP.",
+  "repository": "https://github.com/Fetch-Hive/openapi-mcp",
+  "keywords": ["mcp", "openapi", "fetch-hive"],
+  "stack": "container",
+  "success_url": "/mcp",
+  "env": {
+    "MCP_GATEWAY_TOKEN": {
+      "description": "Bearer token MCP clients send. Copy it into Cursor / Claude after deploy.",
+      "required": true,
+      "generator": "secret"
+    },
+    "MCP_GATEWAY_SPEC_URL": {
+      "description": "HTTPS URL of the OpenAPI document to compile on boot.",
+      "required": true
+    }
+  }
+}

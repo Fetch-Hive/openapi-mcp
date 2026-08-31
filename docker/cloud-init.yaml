@@ -1,0 +1,29 @@
+#cloud-config
+# Hetzner Cloud user_data. amd64 only. Replace TOKEN and SPEC_URL.
+# Optional: attach a Volume and mount it at /mnt/data, then bind that to /data.
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+runcmd:
+  - mkdir -p /opt/mcp-gateway /mnt/data
+  - chown 65532:65532 /mnt/data
+  - |
+    cat > /opt/mcp-gateway/compose.yaml <<'EOF'
+    services:
+      mcp-gateway:
+        image: ghcr.io/fetch-hive/mcp-gateway:0.4.0
+        restart: unless-stopped
+        ports:
+          - "80:8787"
+        environment:
+          PORT: "8787"
+          HOME: /data
+          MCP_GATEWAY_CONFIG: /data/config.toml
+          MCP_GATEWAY_TOKEN: "REPLACE_ME"
+          MCP_GATEWAY_SPEC_URL: "https://example.com/openapi.json"
+        volumes:
+          - /mnt/data:/data
+        command: ["serve", "demo"]
+    EOF
+  - docker compose -f /opt/mcp-gateway/compose.yaml up -d
