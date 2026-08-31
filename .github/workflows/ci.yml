@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: test
+        run: cargo test --workspace --all-targets --locked
+      - name: test proxy without self-host
+        run: cargo test -p mcp-gateway-proxy --no-default-features --locked
+
+  installer:
+    if: github.event_name == 'workflow_dispatch'
+    needs: rust
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:24.04
+          - debian:bookworm-slim
+          - alpine:3.21
+          - node:22-bookworm
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install smoke deps
+        run: |
+          if command -v apk >/dev/null; then apk add --no-cache bash curl ca-certificates; fi
+          if command -v apt-get >/dev/null; then apt-get update && apt-get install -y --no-install-recommends bash curl ca-certificates; fi
+      - name: Quickstart smoke
+        run: bash scripts/quickstart-smoke.sh
+
+  homebrew:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Homebrew formula dry-run
+        run: |
+          echo "Tap Fetch-Hive/homebrew-tap is created after first release."
+          cat packaging/homebrew/mcp-gateway.rb

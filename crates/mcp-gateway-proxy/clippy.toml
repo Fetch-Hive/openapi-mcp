@@ -1,0 +1,9 @@
+# Customer URLs must never be fetched with reqwest. Control-plane HTTP
+# belongs in mcp-gateway-server only. This crate does not depend on
+# axum, Redis, or reqwest; keep the deny so a future dependency cannot sneak in.
+disallowed-types = [
+  { path = "reqwest::Client", reason = "SSRF-pinned hyper dialer only; reqwest is banned on the customer URL path" },
+  { path = "reqwest::blocking::Client", reason = "SSRF-pinned hyper dialer only; reqwest is banned on the customer URL path" },
+  { path = "axum::Router", reason = "HTTP serving belongs in mcp-gateway-server" },
+  { path = "redis::Client", reason = "Redis belongs in mcp-gateway-server" },
+]

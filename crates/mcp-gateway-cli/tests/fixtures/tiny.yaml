@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Tiny Petstore
+  version: "1.0.0"
+servers:
+  - url: https://example.com
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      tags: [pets]
+      summary: List pets
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+      security:
+        - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

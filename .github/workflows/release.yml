@@ -1,0 +1,88 @@
+# Committed but not executed by this phase. Tag v0.1.0 manually after the
+# repository is public. cargo-dist can regenerate this file later.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  packages: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "Release ${{ github.ref_name }}"
+
+  build:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked -p mcp-gateway-cli --target ${{ matrix.target }}
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-gateway-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/mcp-gateway*
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: SHA256SUMS
+        run: |
+          cd dist
+          find . -type f -name 'mcp-gateway*' | sort | xargs sha256sum > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/**/mcp-gateway*'
+      - name: Cosign GHCR (manual follow-up)
+        run: echo "cosign sign ghcr.io/fetch-hive/mcp-gateway:${{ needs.plan.outputs.tag }}"
+
+  npm:
+    needs: checksums
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Trusted Publishing note
+        run: echo "npm publish from npm/ uses Trusted Publishing; not run until the repo is public."

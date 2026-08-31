@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a CLI or compiler change
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This does not require hosted Fetch Hive Cloud APIs
+        - label: This does not weaken the default SSRF policy

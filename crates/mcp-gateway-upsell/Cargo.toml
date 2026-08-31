@@ -1,0 +1,9 @@
+[package]
+name = "mcp-gateway-upsell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fetch Hive Cloud call-to-action strings for the open-source CLI."
+
+[lints]
+workspace = true

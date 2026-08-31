@@ -1,0 +1,16 @@
+# Example compose for a local MCP Gateway. TLS is the reverse proxy's job.
+services:
+  mcp-gateway:
+    image: ghcr.io/fetch-hive/mcp-gateway:0.1.0
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      MCP_GATEWAY_TOKEN: ${MCP_GATEWAY_TOKEN:?set a non-empty MCP_GATEWAY_TOKEN}
+    volumes:
+      - ./config.toml:/config/config.toml:ro
+    command: ["serve", "demo", "--config", "/config/config.toml", "--bind", "0.0.0.0:8787", "--expose"]

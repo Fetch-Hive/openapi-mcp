@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fetchhive.internal/mcp-gateway/ir/1.0",
+  "title": "CompileBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api", "report"],
+  "properties": {
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ir_version",
+        "gateway",
+        "servers",
+        "security_schemes",
+        "operations"
+      ],
+      "properties": {
+        "ir_version": { "const": "1.0" },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "spec_version", "source"],
+          "properties": {
+            "title": { "type": "string" },
+            "description": { "type": ["string", "null"] },
+            "spec_version": { "type": "string" },
+            "source": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "locator", "sha256"],
+              "properties": {
+                "kind": { "enum": ["file", "url", "stdin"] },
+                "locator": { "type": "string" },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+              }
+            }
+          }
+        },
+        "servers": { "type": "array", "items": { "$ref": "#/$defs/server" } },
+        "security_schemes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/security_scheme" }
+        },
+        "operations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/operation" }
+        }
+      }
+    },
+    "report": { "$ref": "#/$defs/report" }
+  },
+  "$defs": {
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url_template", "variables"],
+      "properties": {
+        "url_template": { "type": "string" },
+        "variables": { "type": "object" },
+        "description": { "type": ["string", "null"] }
+      }
+    },
+    "security_scheme": { "type": "object" },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "tool",
+        "source",
+        "http",
+        "security",
+        "tags",
+        "category",
+        "deprecated",
+        "destructive",
+        "enabled_by_default",
+        "execution_plan"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^op_[0-9a-f]{16}$" },
+        "tool": { "$ref": "#/$defs/mcp_tool" },
+        "source": { "type": "object" },
+        "http": { "type": "object" },
+        "security": { "type": "array" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "deprecated": { "type": "boolean" },
+        "destructive": { "type": "boolean" },
+        "enabled_by_default": { "type": "boolean" },
+        "execution_plan": { "type": "object" }
+      }
+    },
+    "mcp_tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "title",
+        "description",
+        "input_schema",
+        "annotations"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "input_schema": { "type": "object" },
+        "output_schema": true,
+        "annotations": { "type": "object" }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec_title",
+        "spec_version",
+        "operations_total",
+        "operations_compiled",
+        "operations_skipped",
+        "tools_enabled_by_default",
+        "compile_ms",
+        "warnings",
+        "skipped"
+      ],
+      "properties": {
+        "spec_title": { "type": "string" },
+        "spec_version": { "type": "string" },
+        "operations_total": { "type": "integer", "minimum": 0 },
+        "operations_compiled": { "type": "integer", "minimum": 0 },
+        "operations_skipped": { "type": "integer", "minimum": 0 },
+        "tools_enabled_by_default": { "type": "integer", "minimum": 0 },
+        "compile_ms": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "array" },
+        "skipped": { "type": "array" }
+      }
+    }
+  }
+}

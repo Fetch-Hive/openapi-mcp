@@ -1,0 +1,48 @@
+[package]
+name = "mcp-gateway-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Single-tenant MCP Gateway protocol server (Streamable HTTP and stdio)."
+
+[lib]
+name = "mcp_gateway_server"
+path = "src/lib.rs"
+
+[features]
+default = ["self-host"]
+self-host = ["mcp-gateway-proxy/self-host"]
+
+[dependencies]
+mcp-gateway-ir.workspace = true
+mcp-gateway-proxy.workspace = true
+mcp-gateway-upsell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+rmcp = { workspace = true, features = ["transport-io"] }
+secrecy.workspace = true
+subtle.workspace = true
+tracing.workspace = true
+http.workspace = true
+async-trait.workspace = true
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+tower = { workspace = true, features = ["util"] }
+mcp-gateway-compile.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+bytes.workspace = true
+http.workspace = true
+serde_json.workspace = true
+
+
+[lints]
+workspace = true

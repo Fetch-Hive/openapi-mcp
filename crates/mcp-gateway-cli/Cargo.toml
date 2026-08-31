@@ -1,0 +1,49 @@
+[package]
+name = "mcp-gateway-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Open-source MCP Gateway operator CLI."
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "mcp-gateway"
+path = "src/main.rs"
+
+[features]
+default = ["self-host"]
+self-host = ["mcp-gateway-proxy/self-host", "mcp-gateway-server/self-host"]
+
+[dependencies]
+mcp-gateway-ir.workspace = true
+mcp-gateway-compile.workspace = true
+mcp-gateway-proxy = { workspace = true, features = ["self-host"] }
+mcp-gateway-server = { workspace = true, features = ["self-host"] }
+mcp-gateway-upsell.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+clap.workspace = true
+toml.workspace = true
+directories.workspace = true
+tokio.workspace = true
+secrecy.workspace = true
+sha2.workspace = true
+hex.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+url.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+time.workspace = true
+serde_yaml.workspace = true
+
+[dev-dependencies]
+pretty_assertions = "1"
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+{
+  "name": "@fetch-hive/mcp-gateway",
+  "version": "0.1.0",
+  "description": "Turn an OpenAPI document into an MCP server",
+  "license": "Apache-2.0",
+  "bin": {
+    "mcp-gateway": "bin/mcp-gateway"
+  },
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
+  "optionalDependencies": {
+    "@fetch-hive/mcp-gateway-linux-x64-musl": "0.1.0",
+    "@fetch-hive/mcp-gateway-linux-arm64-musl": "0.1.0",
+    "@fetch-hive/mcp-gateway-darwin-x64": "0.1.0",
+    "@fetch-hive/mcp-gateway-darwin-arm64": "0.1.0",
+    "@fetch-hive/mcp-gateway-win32-x64-msvc": "0.1.0"
+  },
+  "scripts": {},
+  "files": ["bin", "README.md"]
+}

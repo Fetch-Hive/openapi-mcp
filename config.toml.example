@@ -1,0 +1,36 @@
+# mcp-gateway config.toml  — schema version
+schema_version = 1
+
+# WARNING: never commit tokens, passwords, or private keys to this file.
+# Use env references or file references. `mcp-gateway doctor` fails if it
+# finds a value that looks like a live token (fh_mcp_, sk_live, Bearer ).
+
+[server]
+bind = "127.0.0.1:8787"
+path = "/mcp"
+expose = false
+allow_anonymous = false
+token = { env = "MCP_GATEWAY_TOKEN" }
+
+[ssrf]
+allow_private_networks = false
+allow_insecure_http = false
+
+[cache]
+dir = ""
+ttl = "168h"
+
+[log]
+file = ""
+level = "info"
+
+# [[specs]]
+# name = "petstore"
+# url = "https://petstore3.swagger.io/api/v3/openapi.json"
+# ir_pin = "9f3c…"
+# enabled_tools = []
+# disabled_tools = []
+#
+# [specs.upstream]
+# type = "bearer"
+# token = { env = "PETSTORE_TOKEN" }

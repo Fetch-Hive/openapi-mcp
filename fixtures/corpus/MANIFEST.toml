@@ -1,0 +1,2 @@
+# Optional compile corpus. Each [[case]] has id + spec (relative to this directory).
+# mcp-gateway corpus [--only ID]
