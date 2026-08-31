@@ -31,4 +31,6 @@ TOML. See [deploy](deploy/README.md).
 
 `[[specs]].url` is the OpenAPI document URL. Relative `servers` entries are
 resolved against it. `[[specs]].base_url` (optional) is an absolute upstream
-origin that overrides `servers` for `test` and `serve`.
+origin that overrides `servers` for `test` and `serve`. For a local checkout,
+that is often `http://127.0.0.1:3000` together with
+`ssrf.allow_private_networks = true` and `ssrf.allow_insecure_http = true`.

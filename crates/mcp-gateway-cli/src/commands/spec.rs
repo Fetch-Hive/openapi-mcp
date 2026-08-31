@@ -167,7 +167,7 @@ pub(crate) async fn check_spec_url(
         .await
         .map_err(|e| {
             CliError::policy(format!(
-                "spec URL rejected ({})\n  host: {}\n  reason: {}\nhint: this is the same SSRF policy as Fetch Hive Cloud.\n      if you intend to compile a spec on your private network, pass\n      --allow-private-networks (prints a warning; see mcp-gateway doctor)",
+                "spec URL rejected ({})\n  host: {}\n  reason: {}\nhint: HTTPS public URLs only by default (see docs/ssrf.md).\n      to compile a spec on your private network, pass\n      --allow-private-networks (prints a warning; see mcp-gateway doctor)",
                 e.error_code(),
                 url.host_str().unwrap_or_default(),
                 e
@@ -223,11 +223,12 @@ pub fn inspect(
     let cfg = load_cfg(paths)?;
     let spec = cfg.spec(name)?;
     if let Some(kind) = client {
-        let snippet = clients::snippet(kind, name, &cfg.server.bind, &cfg.server.path);
+        let snippet = clients::render(kind, name, &cfg.server.bind, &cfg.server.path);
         if out.json {
-            out.json_value(&snippet);
+            out.json_value(&clients::json_value(&snippet));
         } else {
-            out.line(&serde_json::to_string_pretty(&snippet).unwrap_or_default());
+            out.line(&format!("Paste into {}", snippet.paste_into));
+            out.line(&snippet.body);
         }
         return Ok(ExitCode::Ok);
     }

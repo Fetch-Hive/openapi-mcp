@@ -1,13 +1,39 @@
-# Client snippets
+# Connect your API to Cursor, Codex, Claude Code
 
-`mcp-gateway inspect NAME --client cursor|claude|vscode|chatgpt` prints a
-paste-ready fragment.
+This is the point of `mcp-gateway`: OpenAPI in, MCP tools out, paste into an
+editor or agent.
 
-**Re-verify against live vendor docs before each release.** Cursor currently
-needs `"type": "http"` (not `streamable-http`) for CLI. Claude Desktop uses
-stdio `command`/`args`. VS Code Copilot MCP uses `servers`. ChatGPT custom
-connectors take a URL plus a bearer header. This phase does not implement
-OAuth.
+Use it in **both** places:
+
+| | Upstream | Typical flags |
+|---|---|---|
+| **WIP / branch** | `http://127.0.0.1:3000` (or Docker RFC1918) | `--allow-private-networks` and `--insecure-http` |
+| **Live** | `https://api.example.com` | defaults |
+
+The editor talks to the gateway (`http://127.0.0.1:8787/mcp` locally, or
+`https://your-host/mcp` after deploy). The gateway talks to **your** API.
+
+```bash
+mcp-gateway inspect NAME --client cursor|claude-code|codex|vscode|claude|chatgpt
+```
+
+Each command prints **where to paste** and a ready fragment. Set
+`MCP_GATEWAY_TOKEN` in the environment first (`init` prints it once).
+
+| `--client` | Paste into | Transport |
+|---|---|---|
+| `cursor` | `.cursor/mcp.json` or Cursor Settings → MCP | HTTP |
+| `claude-code` | `.mcp.json` or `claude mcp add --transport http` | HTTP |
+| `codex` | `~/.codex/config.toml` or project `.codex/config.toml` | HTTP |
+| `vscode` | `.vscode/mcp.json` | HTTP |
+| `claude` | Claude Desktop `mcpServers` | stdio (`serve --stdio`) |
+| `chatgpt` | ChatGPT custom connector | HTTPS URL + bearer |
+
+Vendor shapes change. Cursor wants `"type": "http"` (not `streamable-http`).
+Codex uses `url` + `bearer_token_env_var`. OAuth is not implemented.
+
+After a PaaS deploy, take the same snippet and replace the URL with
+`https://<your-host>/mcp`.
 
 ## Raw HTTP (no MCP client)
 
@@ -43,4 +69,3 @@ curl -sS -D - http://127.0.0.1:8787/mcp \
 ```
 
 Successful responses are JSON (`json_response = true`), not SSE.
-

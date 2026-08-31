@@ -1,4 +1,4 @@
-//! Ordered URL classification (Phase 2 spec §4.8.1 steps 1–13). No I/O.
+//! Ordered URL classification. No I/O.
 
 use super::cidrs::{ipv4_denied, ipv6_denied};
 use super::resolver::Resolver;
@@ -126,7 +126,7 @@ impl SsrfPolicy {
         self
     }
 
-    /// Enable RFC1918/ULA/CGNAT. Compiled out of the hosted binary.
+    /// Enable RFC1918/ULA/CGNAT. No-op unless the `self-host` feature is enabled.
     pub fn with_private_networks(mut self, enabled: bool) -> Self {
         #[cfg(feature = "self-host")]
         {

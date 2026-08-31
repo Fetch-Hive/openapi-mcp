@@ -121,12 +121,12 @@ pub async fn run(
     ));
     out.line(&out.dim("────────"));
     out.line(&format!(
-        "listening. clients: see `mcp-gateway inspect {name} --client cursor`"
+        "listening. paste into Cursor, Codex, or Claude Code: `mcp-gateway inspect {name} --client cursor`"
     ));
     out.line(&mcp_gateway_upsell::serve_boot_banner());
     if allow_private {
         out.err_line(
-            "warning: --allow-private-networks is on; this process can reach RFC1918/ULA targets.",
+            "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback.",
         );
     }
 

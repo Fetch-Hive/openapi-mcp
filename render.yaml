@@ -5,7 +5,7 @@ services:
     name: mcp-gateway
     runtime: image
     image:
-      url: ghcr.io/fetch-hive/mcp-gateway:0.4.0
+      url: ghcr.io/fetch-hive/mcp-gateway:0.5.0
     dockerCommand: serve demo
     autoDeployTrigger: off
     envVars:

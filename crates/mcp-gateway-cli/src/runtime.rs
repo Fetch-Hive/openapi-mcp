@@ -14,8 +14,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 
 pub fn ssrf_policy(globals: &Globals, cfg: &GatewayConfig, allow_insecure: bool) -> SsrfPolicy {
+    let private = globals.allow_private_networks || cfg.ssrf.allow_private_networks;
     let policy = SsrfPolicy::default()
-        .with_private_networks(globals.allow_private_networks || cfg.ssrf.allow_private_networks)
+        .with_private_networks(private)
+        .with_allow_loopback(private)
         .with_metadata(globals.allow_metadata || cfg.ssrf.allow_metadata)
         .with_allow_insecure_http(allow_insecure || cfg.ssrf.allow_insecure_http);
     #[cfg(debug_assertions)]

@@ -19,5 +19,5 @@ body:
     attributes:
       label: Scope
       options:
-        - label: This does not require hosted Fetch Hive Cloud APIs
+        - label: This does not require a Fetch Hive account or hosted APIs
         - label: This does not weaken the default SSRF policy

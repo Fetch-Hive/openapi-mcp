@@ -1,6 +1,6 @@
 //! IANA special-purpose CIDR tables plus cloud-metadata extras.
 //!
-//! Sources (Phase 2 spec §4.8.2–4.8.4):
+//! Sources:
 //! IANA IPv4 Special-Purpose Address Registry (2025-10-09),
 //! IANA IPv6 Special-Purpose Address Registry (2025-10-09),
 //! plus Azure Wire Server, Aliyun metadata, and AWS IMDSv6.

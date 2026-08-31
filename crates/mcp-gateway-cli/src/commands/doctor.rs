@@ -147,14 +147,17 @@ pub async fn run(
     let policy = ssrf_policy(globals, &cfg, false);
     let resolver = resolver(&policy)?;
     let always_denied = [
-        "https://127.0.0.1/",
-        "https://[::1]/",
         "https://169.254.169.254/",
         "https://[::ffff:169.254.169.254]/",
         "https://metadata.google.internal/",
         "https://instance-data/",
     ];
-    let rfc1918 = ["https://10.0.0.1/", "https://192.168.1.1/"];
+    let private_or_loopback = [
+        "https://127.0.0.1/",
+        "https://[::1]/",
+        "https://10.0.0.1/",
+        "https://192.168.1.1/",
+    ];
     let mut blocked = 0;
     let mut ssrf_fail: Option<String> = None;
     for raw in always_denied {
@@ -175,16 +178,18 @@ pub async fn run(
             }
         }
     }
-    for raw in rfc1918 {
+    for raw in private_or_loopback {
         let url = Url::parse(raw).expect("fixture url");
         match pin_url(&url, 0, &policy, resolver.as_ref()).await {
             Err(e) => {
                 if policy.allow_private_networks() {
                     ssrf_fail = Some(format!(
-                        "RFC1918 {raw} should pin with --allow-private-networks, got {}",
+                        "private/loopback {raw} should pin with --allow-private-networks, got {}",
                         e.error_code()
                     ));
-                } else if e.error_code() != "resolved_blocked" {
+                } else if e.error_code() != "resolved_blocked"
+                    && e.error_code() != "hostname_denied"
+                {
                     ssrf_fail = Some(format!(
                         "expected resolved_blocked for {raw}, got {}",
                         e.error_code()
@@ -208,7 +213,7 @@ pub async fn run(
         let expected = if policy.allow_private_networks() {
             always_denied.len()
         } else {
-            always_denied.len() + rfc1918.len()
+            always_denied.len() + private_or_loopback.len()
         };
         checks.push(ok(
             "ssrf self-test",

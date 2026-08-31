@@ -247,7 +247,8 @@ fn inspect_client_cursor() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("\"type\": \"http\""));
+        .stdout(predicate::str::contains("\"type\": \"http\""))
+        .stdout(predicate::str::contains(".cursor/mcp.json"));
 }
 
 #[test]
@@ -458,6 +459,42 @@ fn inspect_client_claude() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"command\": \"mcp-gateway\""));
+}
+
+#[test]
+fn inspect_client_claude_code() {
+    let (_dir, cfg, _) = primed();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "inspect",
+            "petstore",
+            "--client",
+            "claude-code",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"type\": \"http\""))
+        .stdout(predicate::str::contains(".mcp.json"));
+}
+
+#[test]
+fn inspect_client_codex() {
+    let (_dir, cfg, _) = primed();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "inspect",
+            "petstore",
+            "--client",
+            "codex",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[mcp_servers.petstore]"))
+        .stdout(predicate::str::contains("bearer_token_env_var"));
 }
 
 #[test]

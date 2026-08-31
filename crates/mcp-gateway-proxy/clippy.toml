@@ -1,4 +1,4 @@
-# Customer URLs must never be fetched with reqwest. Control-plane HTTP
+# Customer URLs must never be fetched with reqwest. HTTP serving
 # belongs in mcp-gateway-server only. This crate does not depend on
 # axum, Redis, or reqwest; keep the deny so a future dependency cannot sneak in.
 disallowed-types = [

@@ -1,4 +1,4 @@
-//! Destructive detection and MCP annotation mapping. See Phase 1 §4.6.
+//! Destructive detection and MCP annotation mapping.
 
 use mcp_gateway_ir::ToolAnnotations;
 

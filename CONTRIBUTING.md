@@ -16,7 +16,7 @@ cargo test --all-targets --locked
 
 ## Compile corpus
 
-Optional Phase 1 corpus lives under `fixtures/corpus/`. Add a case to
+Optional corpus lives under `fixtures/corpus/`. Add a case to
 `fixtures/corpus/MANIFEST.toml` and a corresponding OpenAPI file. Run:
 
 ```bash
@@ -30,7 +30,7 @@ or trimmed excerpts.
 
 ## Pull requests
 
-- This repository is the single-tenant CLI and libraries. Do not add
-  multi-tenant control-plane, quota, or dashboard glue here.
+- This repository is the CLI and libraries. Quota, dashboard, and
+  multi-tenant APIs are out of scope.
 - Do not weaken the default SSRF policy. Private-network access is
   `--allow-private-networks` behind the `self-host` Cargo feature.

@@ -1,4 +1,4 @@
-//! HTTP response → MCP tool result mapping (Phase 2 spec §4.5.2–§4.5.3).
+//! HTTP response → MCP tool result mapping.
 
 use crate::error::ProxyError;
 use serde::{Deserialize, Serialize};

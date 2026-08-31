@@ -1,4 +1,4 @@
-//! Tool name generation. Pure, locale-independent. See Phase 1 §4.4.
+//! Tool name generation. Pure, locale-independent.
 
 const RESERVED: &[&str] = &[
     "initialize",

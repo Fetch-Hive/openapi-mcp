@@ -25,4 +25,6 @@ the start command.
 
 ## After deploy
 
-`https://<app>.herokuapp.com/mcp` with the bearer token.
+`https://<app>.herokuapp.com/mcp` with the bearer token. Point Cursor, Codex,
+or Claude Code at that URL the same way as local
+([clients](../clients.md)).

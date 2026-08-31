@@ -1,13 +1,13 @@
 # CLI reference
 
-Generated from clap. Hidden Phase 1 aliases (`compile`, `list-tools`, `call`,
+Generated from clap. Hidden aliases (`compile`, `list-tools`, `call`,
 `corpus`) are listed by `mcp-gateway --help-all`.
 
 ```text
 mcp-gateway init [--force] [--bind ADDR] [--allow-private-networks]
-mcp-gateway add-spec --name NAME (--url HTTPS_URL | --file PATH) [--base-url URL]
+mcp-gateway add-spec --name NAME (--url HTTPS_URL | --file PATH) [--base-url URL] [--insecure-http]
 mcp-gateway list [--json]
-mcp-gateway inspect [NAME] [--tool TOOL] [--client cursor|claude|vscode|chatgpt]
+mcp-gateway inspect [NAME] [--tool TOOL] [--client cursor|claude-code|codex|vscode|claude|chatgpt]
 mcp-gateway auth add NAME --type none|bearer|basic|api_key_header|api_key_query|custom_headers
              (--from-env VAR | --from-file PATH)
 mcp-gateway auth list [NAME]
@@ -24,14 +24,16 @@ mcp-gateway upgrade [--version X.Y.Z] [--dry-run]
 `inspect NAME` (no `--tool`) lists compiled MCP tool names as a table. Names are
 snake_cased from the OpenAPI `operationId` (`getInventory` → `get_inventory`),
 not the literal id. `inspect NAME --tool TOOL` and `mcp-gateway test NAME TOOL`
-require that compiled name.
+require that compiled name. `inspect NAME --client …` prints a paste-ready
+snippet and where to put it ([clients](clients.md)).
 
 Relative OpenAPI `servers` URLs (Petstore's `/api/v3`) are resolved against the
 spec document URL when you `add-spec --url`. Already-cached IR is resolved the
 same way at `test`/`serve` if the spec entry still has `url`. For a local file
-whose `servers` entry is relative, pass `--base-url https://host/api` on
-`add-spec`, `test`, or `serve`. `mcp-gateway test` prints the resolved upstream
-URL. A 5xx is the remote API (the public Petstore `getInventory` demo often
+whose `servers` entry is relative, pass `--base-url` on `add-spec`, `test`, or
+`serve` (for a local API: `--base-url http://127.0.0.1:3000` plus
+`--allow-private-networks` and `--insecure-http`). `mcp-gateway test` prints the
+resolved upstream URL. A 5xx is the remote API (the public Petstore `getInventory` demo often
 500s); 401/403 points at `mcp-gateway auth list`.
 `--follow` on `logs` is not implemented and exits 1.
 

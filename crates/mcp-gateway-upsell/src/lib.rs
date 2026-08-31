@@ -1,4 +1,4 @@
-//! Cloud call-to-action strings for the open-source CLI.
+//! Call-to-action strings pointing at hosted MCP Gateway.
 //!
 //! This crate must not import telemetry, PostHog, or any network client.
 

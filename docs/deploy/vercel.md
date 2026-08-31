@@ -6,5 +6,3 @@ process that stays up between client requests.
 
 Use [Render](render.md), a [Hetzner VPS](hetzner.md), or
 [hosted MCP Gateway](https://fetchhive.com/mcp).
-
-Do not add a Vercel Deploy button for this binary.

@@ -1,4 +1,4 @@
-//! Per-operation IR lowering. Split along Phase 1 §4.3.
+//! Per-operation IR lowering.
 
 mod body;
 mod collect;

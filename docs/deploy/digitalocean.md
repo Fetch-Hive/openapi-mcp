@@ -19,3 +19,8 @@ Set `MCP_GATEWAY_TOKEN` and `MCP_GATEWAY_SPEC_URL` in the App Platform env UI.
 
 Bind loopback (`127.0.0.1`) will fail health checks — `PORT` handling in
 `mcp-gateway serve` binds `0.0.0.0`.
+
+## After deploy
+
+Point Cursor, Codex, or Claude Code at `https://<app>.ondigitalocean.app/mcp`
+with the bearer token ([clients](../clients.md)).

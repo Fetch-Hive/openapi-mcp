@@ -1,9 +1,8 @@
 //! Outbound safety for spec loading and `$ref` fetch inside this crate.
 //!
 //! Execute-path SSRF is implemented in `mcp-gateway-proxy` (not by depending on
-//! this crate). Phase 1 still connects by hostname after the DNS check (TOCTOU
-//! remains). That is accepted for the CLI and forbidden to copy into the hosted
-//! dialer.
+//! this crate). This loader still connects by hostname after the DNS check
+//! (TOCTOU remains).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use thiserror::Error;
@@ -11,7 +10,7 @@ use url::Url;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SafetyOpts {
-    /// Skip RFC1918 / ULA denials. Loopback and cloud metadata stay denied.
+    /// Skip RFC1918 / ULA / loopback denials. Cloud metadata stays denied.
     pub allow_private: bool,
 }
 
@@ -81,6 +80,9 @@ pub fn check_host(host: &str) -> Result<(), SafetyError> {
 pub fn check_host_with(host: &str, opts: SafetyOpts) -> Result<(), SafetyError> {
     let lower = host.to_ascii_lowercase();
     if lower == "localhost" || lower.ends_with(".localhost") {
+        if opts.allow_private {
+            return Ok(());
+        }
         return Err(SafetyError::Localhost);
     }
     if let Ok(ip) = host.parse::<IpAddr>() {
@@ -129,8 +131,7 @@ pub fn is_blocked_ip_with(ip: IpAddr, opts: SafetyOpts) -> bool {
 }
 
 fn is_blocked_v4(v4: Ipv4Addr, opts: SafetyOpts) -> bool {
-    if v4.is_loopback()
-        || v4.is_link_local()
+    if v4.is_link_local()
         || v4.is_multicast()
         || v4.is_broadcast()
         || v4.is_unspecified()
@@ -138,6 +139,9 @@ fn is_blocked_v4(v4: Ipv4Addr, opts: SafetyOpts) -> bool {
         || v4.octets()[0] == 0
     {
         return true;
+    }
+    if v4.is_loopback() {
+        return !opts.allow_private;
     }
     if opts.allow_private {
         return false;
@@ -149,13 +153,15 @@ fn is_blocked_v6(v6: Ipv6Addr, opts: SafetyOpts) -> bool {
     if let Some(v4) = embedded_ipv4(v6) {
         return is_blocked_v4(v4, opts);
     }
-    if v6.is_loopback()
-        || v6.is_multicast()
+    if v6.is_multicast()
         || v6.is_unspecified()
         || is_ipv6_link_local(v6)
         || v6.octets() == Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254).octets()
     {
         return true;
+    }
+    if v6.is_loopback() {
+        return !opts.allow_private;
     }
     if opts.allow_private {
         return false;
@@ -238,9 +244,9 @@ mod tests {
             allow_private: true,
         };
         parse_https_url_with("https://10.0.0.1/spec.json", opts).unwrap();
+        parse_https_url_with("https://127.0.0.1/spec.json", opts).unwrap();
+        check_host_with("localhost", opts).unwrap();
         let err = parse_https_url_with("https://169.254.169.254/spec.json", opts).unwrap_err();
-        assert!(matches!(err, SafetyError::BlockedAddress(_)));
-        let err = parse_https_url_with("https://127.0.0.1/spec.json", opts).unwrap_err();
         assert!(matches!(err, SafetyError::BlockedAddress(_)));
     }
 }

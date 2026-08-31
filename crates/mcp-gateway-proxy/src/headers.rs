@@ -1,4 +1,4 @@
-//! Hop-by-hop and always-stripped headers (Phase 2 spec §4.8.7).
+//! Hop-by-hop and always-stripped headers.
 
 use http::{header::HeaderName, HeaderMap};
 

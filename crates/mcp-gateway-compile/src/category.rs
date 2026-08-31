@@ -1,4 +1,4 @@
-//! Category assignment. See Phase 1 §4.7.
+//! Category assignment.
 
 const GENERIC_SEGMENTS: &[&str] = &["v1", "v2", "v3", "api", "rest"];
 

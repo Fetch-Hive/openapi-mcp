@@ -65,7 +65,9 @@ pub fn run(
     ));
     out.line(&format!("IR cache: {}", paths.cache_dir.display()));
     if allow_private {
-        out.err_line("warning: --allow-private-networks is on; this process can reach RFC1918/ULA targets. Cloud never enables this.");
+        out.err_line(
+            "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback.",
+        );
     }
     out.line("Next: mcp-gateway add-spec --name petstore --url https://petstore3.swagger.io/api/v3/openapi.json");
     Ok(ExitCode::Ok)

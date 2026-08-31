@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "mcp-gateway",
     version,
-    about = "Turn an OpenAPI document into a local MCP server.",
+    about = "OpenAPI to MCP — connect a live or local API to Cursor, Codex, Claude Code, and agents.",
     long_about = None
 )]
 pub struct Cli {
@@ -32,7 +32,7 @@ pub struct Globals {
     /// Colorize output.
     #[arg(long, global = true, default_value = "auto")]
     pub color: ColorMode,
-    /// Skip RFC1918/ULA denials and use the system resolver. Loud opt-in.
+    /// Reach RFC1918, ULA, and loopback (local / branch APIs). Loud opt-in.
     #[arg(long, global = true)]
     pub allow_private_networks: bool,
     /// Also allow cloud metadata CIDRs. Hidden, dangerous, debug only.
@@ -148,7 +148,7 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Phase 1: compile an OpenAPI document to IR.
+    /// Compile an OpenAPI document to IR.
     #[command(hide = true)]
     Compile {
         spec: PathBuf,
@@ -157,14 +157,14 @@ pub enum Commands {
         #[arg(long)]
         report: Option<PathBuf>,
     },
-    /// Phase 1: list tools in a compiled IR document.
+    /// List tools in a compiled IR document.
     #[command(hide = true, name = "list-tools")]
     ListTools {
         ir: PathBuf,
         #[arg(long)]
         tag: Option<String>,
     },
-    /// Phase 1: call one tool from a compiled IR document.
+    /// Call one tool from a compiled IR document.
     #[command(hide = true)]
     Call {
         ir: PathBuf,
@@ -178,7 +178,7 @@ pub enum Commands {
         #[arg(long)]
         allow_disabled: bool,
     },
-    /// Phase 1: run the compile corpus.
+    /// Run the compile corpus.
     #[command(hide = true)]
     Corpus {
         #[arg(long)]
@@ -227,14 +227,19 @@ pub enum AuthType {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ClientKind {
     Cursor,
+    /// Claude Code (HTTP).
+    #[clap(name = "claude-code")]
+    ClaudeCode,
+    /// Claude Desktop (stdio).
     Claude,
+    Codex,
     Vscode,
     Chatgpt,
 }
 
 pub fn print_help_all() {
     println!(
-        "mcp-gateway operator CLI plus hidden Phase 1 aliases.\n\n\
+        "mcp-gateway operator CLI plus hidden aliases.\n\n\
 Visible commands:\n  init, add-spec, list, inspect, auth, serve, doctor, test, logs, version, upgrade\n\n\
 Hidden aliases (--help-all):\n  compile <SPEC> [--out ir.json] [--report report.json]\n  list-tools <ir.json> [--tag TAG]\n  call <ir.json> <tool_name> --args '<json>' [--base-url URL] [--bearer-env VAR] [--allow-disabled]\n  corpus [--only ID]\n"
     );

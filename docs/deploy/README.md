@@ -1,7 +1,10 @@
 # Deploy mcp-gateway
 
-Self-host the **open-source CLI** (`mcp-gateway serve`) as a long-running HTTP
-process. This is not Fetch Hive Cloud.
+Self-host `mcp-gateway serve` as a long-running HTTP process, then point
+Cursor, Codex, Claude Code, or another MCP client at `https://<host>/mcp`.
+
+This is the **live API** path. To hit a WIP or branch API on your laptop,
+run the CLI locally instead — see the README and [clients](../clients.md).
 
 The published image is `ghcr.io/fetch-hive/mcp-gateway` (**amd64 / x86_64
 musl** only today). It is distroless: there is no shell, so platforms must not
@@ -33,4 +36,5 @@ from `MCP_GATEWAY_SPEC_URL` on every start.
 | [Vercel](vercel.md) | No | n/a — not supported |
 
 Prefer [hosted MCP Gateway](https://fetchhive.com/mcp) if you do not want to
-operate a process.
+operate a process. After the process is up, [connect an editor](../clients.md)
+(`inspect --client cursor` and replace the URL with your public `https://…/mcp`).

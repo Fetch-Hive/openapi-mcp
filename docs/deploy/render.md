@@ -30,5 +30,6 @@ Without a disk, every deploy recompiles from `MCP_GATEWAY_SPEC_URL`.
 
 ## After deploy
 
-Point Cursor at `https://<service>.onrender.com/mcp` with
-`Authorization: Bearer <MCP_GATEWAY_TOKEN>`.
+Point Cursor, Codex, or Claude Code at `https://<service>.onrender.com/mcp`
+with `Authorization: Bearer <MCP_GATEWAY_TOKEN>`. Snippets:
+`mcp-gateway inspect demo --client cursor` (swap in the Render URL).

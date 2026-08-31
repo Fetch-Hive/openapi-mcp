@@ -20,3 +20,6 @@ Paste [`docker/cloud-init.yaml`](../../docker/cloud-init.yaml) into the Console
 cloud-config field (or API `user_data`) after replacing the token, spec URL,
 and image tag. Attach and mount a Volume at `/mnt/data` if you want persistence
 across rebuilds.
+
+Put TLS in front, then point Cursor, Codex, or Claude Code at
+`https://your-host/mcp` ([clients](../clients.md)).
