@@ -70,7 +70,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 # `brew tap` then `brew install mcp-gateway` is refused until you `brew trust`.
 brew install Fetch-Hive/tap/mcp-gateway
 
-# Docker (linux/amd64 image published with each release)
+# Docker (linux/amd64 and linux/arm64)
 docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.6.0 version
 
 # npm — wrapper plus the prebuilt binary for this machine
