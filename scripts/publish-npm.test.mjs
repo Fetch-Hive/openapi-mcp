@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TARGETS, assetName, packRelease } from "./publish-npm.mjs";
+import { TARGETS, assetName, packRelease, publishPacked } from "./publish-npm.mjs";
 
 test("packs a wrapper plus one binary package per release archive", () => {
   const assets = mkdtempSync(path.join(tmpdir(), "mcp-gateway-assets-"));
@@ -48,5 +48,27 @@ test("packs a wrapper plus one binary package per release archive", () => {
     assert.ok(files.includes("bin/mcp-gateway"));
   } finally {
     rmSync(assets, { recursive: true, force: true });
+  }
+});
+
+test("skips npm publish when that version is already public", () => {
+  const out = mkdtempSync(path.join(tmpdir(), "mcp-gateway-publish-"));
+  const names = [...TARGETS.map((target) => target.pkg), "@fetch-hive/mcp-gateway"];
+  try {
+    for (const name of names) {
+      const dir = path.join(out, name.split("/").pop());
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "0.6.0" }));
+    }
+    const seen = [];
+    publishPacked(out, "0.6.0", {
+      isPublished(name, version) {
+        seen.push(`${name}@${version}`);
+        return true;
+      },
+    });
+    assert.deepEqual(seen.sort(), names.map((name) => `${name}@0.6.0`).sort());
+  } finally {
+    rmSync(out, { recursive: true, force: true });
   }
 });

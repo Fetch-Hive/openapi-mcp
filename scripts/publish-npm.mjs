@@ -127,12 +127,29 @@ export function packRelease({ version, assetsDir, outDir }) {
   return { outDir, metaDir };
 }
 
-export function publishPacked(outDir, version) {
+export function alreadyPublished(name, version) {
+  try {
+    const published = execFileSync("npm", ["view", `${name}@${version}`, "version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return published === version;
+  } catch {
+    return false;
+  }
+}
+
+export function publishPacked(outDir, version, { isPublished = alreadyPublished } = {}) {
   const tag = version.includes("-") ? "next" : "latest";
   const provenance = process.env.ACTIONS_ID_TOKEN_REQUEST_URL ? ["--provenance"] : [];
   const dirs = TARGETS.map((target) => path.join(outDir, target.pkg.split("/").pop()));
   dirs.push(path.join(outDir, "mcp-gateway"));
   for (const dir of dirs) {
+    const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
+    if (isPublished(pkg.name, pkg.version)) {
+      console.log(`skip ${pkg.name}@${pkg.version} (already published)`);
+      continue;
+    }
     execFileSync(
       "npm",
       ["publish", "--access", "public", "--tag", tag, ...provenance],

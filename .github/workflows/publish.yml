@@ -2,8 +2,8 @@
 #   ghcr.io/fetch-hive/mcp-gateway:X.Y.Z  (and :latest on a stable release)
 #   @fetch-hive/mcp-gateway on npm
 #
-# Runs after the GitHub Release exists, so the npm job can download the
-# binaries the Release workflow uploaded.
+# Runs after the GitHub Release exists. Both jobs use the binaries that
+# Release already uploaded. The image does not compile Rust.
 #
 # Repository secret NPM_TOKEN: an npm Automation token that can publish
 # @fetch-hive/*. GHCR uses this workflow's GITHUB_TOKEN (packages: write).
@@ -31,9 +31,11 @@ jobs:
       contents: read
       packages: write
     steps:
+      # Runtime Dockerfile lives on the branch you run from. v0.6.0 was tagged
+      # before it existed, so a dispatch of that tag must not check out the tag.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
 
       - uses: docker/setup-buildx-action@v3
 
@@ -63,18 +65,33 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
+      - name: Stage release binary
+        id: stage
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/mcp-release"
+          image="${RUNNER_TEMP}/mcp-image"
+          mkdir -p "$work" "$image"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'mcp-gateway-cli-x86_64-unknown-linux-musl.tar.xz' \
+            --dir "$work"
+          tar -xJf "$work/mcp-gateway-cli-x86_64-unknown-linux-musl.tar.xz" -C "$work"
+          install -m 755 "$work/mcp-gateway-cli-x86_64-unknown-linux-musl/mcp-gateway" "$image/mcp-gateway"
+          cp docker/Dockerfile.runtime "$image/Dockerfile"
+          echo "context=$image" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         with:
-          context: .
-          file: docker/Dockerfile
+          context: ${{ steps.stage.outputs.context }}
           push: true
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.tags.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
   npm:
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && startsWith(inputs.tag, 'v'))

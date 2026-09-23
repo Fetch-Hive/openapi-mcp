@@ -45,7 +45,7 @@ mcp-gateway serve demo
 mcp-gateway inspect demo --client cursor
 ```
 
-Or skip operating a process: [hosted MCP Gateway](https://fetchhive.com/mcp).
+Or skip operating a process: [hosted MCP Gateway](https://fetchhive.com/mcp?utm_source=github&utm_medium=readme&utm_campaign=openapi_mcp).
 PaaS / VPS: [deploy](docs/deploy/README.md).
 
 ## Deploy

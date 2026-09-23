@@ -8,8 +8,11 @@ run the CLI locally instead — see the README and [clients](../clients.md).
 
 The published image is `ghcr.io/fetch-hive/mcp-gateway` (**linux/amd64**,
 x86_64 musl, distroless). There is no shell, so platforms must not rely on
-`$PORT` expansion in `CMD`. The binary reads `PORT` itself. [`docker/Dockerfile`](../../docker/Dockerfile)
-is what the release workflow builds.
+`$PORT` expansion in `CMD`. The binary reads `PORT` itself. The publish
+workflow packs the GitHub Release musl binary with
+[`docker/Dockerfile.runtime`](../../docker/Dockerfile.runtime).
+[`docker/Dockerfile`](../../docker/Dockerfile) is the from-source image
+Heroku and DigitalOcean build.
 
 ## What you set
 

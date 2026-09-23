@@ -1,0 +1,9 @@
+# Published GHCR image. The publish workflow places the release binary
+# `mcp-gateway` (x86_64-unknown-linux-musl) beside this file, then builds
+# that directory. Heroku and DigitalOcean still build docker/Dockerfile.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY mcp-gateway /usr/local/bin/mcp-gateway
+USER nonroot
+EXPOSE 8787
+ENTRYPOINT ["/usr/local/bin/mcp-gateway"]
+CMD ["--help"]
