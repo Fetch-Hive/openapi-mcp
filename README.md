@@ -73,7 +73,7 @@ Order: Homebrew → Docker → npx → curl|sh → cargo.
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.5.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.6.0 version
 
 # npx (optionalDependencies, no postinstall)
 npx --yes @fetch-hive/mcp-gateway version

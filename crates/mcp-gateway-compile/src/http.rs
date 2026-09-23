@@ -18,6 +18,25 @@ pub fn download_https_capped(
     max_bytes: usize,
     timeout: Duration,
 ) -> Result<Vec<u8>, DownloadError> {
+    // `reqwest::blocking` builds a private Tokio runtime. Dropping that runtime
+    // panics when this function is called from inside another runtime (the CLI
+    // runs every command under `block_on`). A fresh thread has no entered runtime.
+    let url = url.to_owned();
+    let handle = std::thread::Builder::new()
+        .name("mcp-gateway-spec-download".into())
+        .spawn(move || download_https_capped_blocking(&url, max_bytes, timeout))
+        .map_err(|e| DownloadError::Failed(e.to_string()))?;
+    match handle.join() {
+        Ok(result) => result,
+        Err(_) => Err(DownloadError::Failed("download thread panicked".to_owned())),
+    }
+}
+
+fn download_https_capped_blocking(
+    url: &str,
+    max_bytes: usize,
+    timeout: Duration,
+) -> Result<Vec<u8>, DownloadError> {
     let client = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(timeout)
@@ -62,5 +81,22 @@ impl Write for CappedWriter {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn download_inside_a_tokio_runtime_returns_an_error() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let err = rt.block_on(async {
+            download_https_capped("https://127.0.0.1:1/", 64, Duration::from_millis(500))
+        });
+        assert!(err.is_err(), "expected a connection error, not a panic");
     }
 }

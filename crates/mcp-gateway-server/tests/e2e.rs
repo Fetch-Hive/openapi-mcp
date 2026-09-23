@@ -370,6 +370,61 @@ async fn enabled_tools_allowlist() {
     assert_eq!(h.gateway.operations().count(), 0);
 }
 
+#[tokio::test]
+async fn legacy_initialize_echoes_client_version_and_lists_tools() {
+    let h = handler_for("https://example.com".into(), vec![], vec![]);
+    let serve = opts(false, Some(TOKEN), false);
+    let init = Request::builder()
+        .method("POST")
+        .uri("/mcp")
+        .header("content-type", "application/json")
+        .header("accept", "application/json, text/event-stream")
+        .header("host", "127.0.0.1")
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "cursor", "version": "3.21.18"}
+                }
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let resp = oneshot(h.clone(), &serve, init).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_str(&body_text(resp).await).unwrap();
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25", "{body}");
+
+    let list = Request::builder()
+        .method("POST")
+        .uri("/mcp")
+        .header("content-type", "application/json")
+        .header("accept", "application/json, text/event-stream")
+        .header("host", "127.0.0.1")
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .header("mcp-protocol-version", "2025-11-25")
+        .body(Body::from(
+            serde_json::to_vec(&json!({
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/list",
+                "params": {}
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let resp = oneshot(h, &serve, list).await;
+    let status = resp.status();
+    let text = body_text(resp).await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    assert!(text.contains("list_pets"), "{text}");
+}
+
 #[test]
 fn compile_helper_sees_list_pets() {
     let bundle = compile_tiny();

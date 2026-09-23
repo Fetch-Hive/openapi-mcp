@@ -193,7 +193,10 @@ impl ServerHandler for GatewayHandler {
     }
 
     fn supported_protocol_versions(&self) -> std::borrow::Cow<'static, [ProtocolVersion]> {
-        std::borrow::Cow::Borrowed(&[ProtocolVersion::V_2026_07_28])
+        // Cursor, VS Code, Claude Code, and default Codex still open with
+        // `initialize` on 2025-11-25 or earlier. 2026-07-28 stays in the list
+        // for clients that send per-request metadata.
+        std::borrow::Cow::Borrowed(ProtocolVersion::KNOWN_VERSIONS)
     }
 
     async fn list_tools(
@@ -234,10 +237,28 @@ impl ServerHandler for GatewayHandler {
 
     async fn initialize(
         &self,
-        _request: rmcp::model::InitializeRequestParams,
-        _context: RequestContext<RoleServer>,
+        request: rmcp::model::InitializeRequestParams,
+        context: RequestContext<RoleServer>,
     ) -> Result<rmcp::model::InitializeResult, McpError> {
-        Ok(self.get_info())
+        context.peer.set_peer_info(request.clone());
+        let mut info = self.get_info();
+        let supported = self.supported_protocol_versions();
+        if supported.contains(&request.protocol_version) {
+            info.protocol_version = request.protocol_version.clone();
+        } else {
+            info!(
+                client = %request.client_info.name,
+                requested = %request.protocol_version,
+                fallback = %info.protocol_version,
+                "initialize: unknown protocol version, falling back"
+            );
+        }
+        info!(
+            client = %request.client_info.name,
+            protocol = %info.protocol_version,
+            "initialize"
+        );
+        Ok(info)
     }
 
     async fn discover(
@@ -308,10 +329,20 @@ fn operation_to_tool(op: &Operation) -> Tool {
         ),
     );
     t.title = Some(op.tool.title.clone());
-    if let Some(schema) = &op.tool.output_schema {
-        t.output_schema = schema.as_object().cloned().map(Arc::new);
+    if let Some(schema) = object_output_schema(op.tool.output_schema.as_ref()) {
+        t.output_schema = Some(Arc::new(schema));
     }
     t
+}
+
+/// Cursor's client rejects `outputSchema` unless the root `type` is `object`.
+fn object_output_schema(schema: Option<&Value>) -> Option<serde_json::Map<String, Value>> {
+    let obj = schema?.as_object()?;
+    if obj.get("type").and_then(|v| v.as_str()) == Some("object") {
+        Some(obj.clone())
+    } else {
+        None
+    }
 }
 
 fn tool_result_to_mcp(result: &ToolResult) -> CallToolResult {
@@ -324,7 +355,11 @@ fn tool_result_to_mcp(result: &ToolResult) -> CallToolResult {
     } else {
         CallToolResult::success(contents)
     };
-    mapped.structured_content = result.structured.clone();
+    mapped.structured_content = result
+        .structured
+        .as_ref()
+        .filter(|v| v.is_object())
+        .cloned();
     mapped
 }
 

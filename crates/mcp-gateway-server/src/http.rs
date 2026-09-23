@@ -79,7 +79,10 @@ pub fn build_router(handler: GatewayHandler, opts: &HttpServeOptions) -> Result<
             "::1".into(),
         ];
     }
-    rmcp_config.stateless_protocol_metadata_required = true;
+    // Legacy clients (initialize, no per-request `_meta`) and 2026-07-28
+    // clients share this endpoint. Requiring metadata rejects Cursor, VS Code,
+    // Claude Code, and default Codex.
+    rmcp_config.stateless_protocol_metadata_required = false;
 
     let mcp = StreamableHttpService::new(
         {

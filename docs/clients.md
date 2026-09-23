@@ -37,10 +37,14 @@ After a PaaS deploy, take the same snippet and replace the URL with
 
 ## Raw HTTP (no MCP client)
 
-The Streamable HTTP transport is MCP protocol `2026-07-28` and stateless.
-Every JSON-RPC POST except `initialize` must send `MCP-Protocol-Version`,
-`Mcp-Method`, and `params._meta` protocol metadata. A request that omits
-those headers returns HTTP 400 / JSON-RPC `-32020`.
+The Streamable HTTP transport accepts both eras on `/mcp`:
+
+- Legacy clients (Cursor, VS Code, Claude Code, default Codex) send
+  `initialize` with `2025-11-25`, `2025-06-18`, `2025-03-26`, or `2024-11-05`
+  and then `tools/list` / `tools/call` with no per-request `_meta`. The
+  gateway answers with the version the client asked for.
+- `2026-07-28` clients may send `MCP-Protocol-Version`, `Mcp-Method`, and
+  `params._meta`. Those requests are served statelessly.
 
 Default bind is `http://127.0.0.1:8787/mcp` with bearer
 `Authorization: Bearer $MCP_GATEWAY_TOKEN`.
