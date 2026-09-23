@@ -47,3 +47,12 @@ Global flags: `--config PATH`, `-v`/`--verbose`, `-q`/`--quiet`, `--json`,
 
 Exit codes: `0` ok, `1` usage/config, `2` policy/SSRF/doctor-fail,
 `3` supply-chain, `4` upstream/`isError`, `130` SIGINT.
+
+## Tunnel
+
+`serve` can expose the local Streamable HTTP server through an outbound
+WebSocket, so a remote MCP client calls `https://<slug>.mcp.fetchhive.com/mcp`
+while the process keeps listening on loopback. Anonymous tunnels need no
+account. The framing, slug rules, limits, and close codes are specified in
+[Tunnel protocol](tunnel-protocol.md). The CLI flag and banner ship with the
+anonymous client; this page stays the command reference.

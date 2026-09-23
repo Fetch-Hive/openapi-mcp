@@ -101,6 +101,7 @@ vulnerabilities to security@fetchhive.com — see `SECURITY.md`.
 - [Deploy (PaaS + VPS)](docs/deploy/README.md)
 - [SSRF policy](docs/ssrf.md)
 - [Private-network flag](docs/private-networks.md)
+- [Tunnel protocol](docs/tunnel-protocol.md)
 
 ## Licence
 

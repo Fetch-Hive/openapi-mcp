@@ -1525,6 +1525,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcp-gateway-tunnel-proto"
+version = "0.6.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "mcp-gateway-upsell"
 version = "0.6.0"
 
