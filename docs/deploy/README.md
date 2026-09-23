@@ -6,9 +6,10 @@ Cursor, Codex, Claude Code, or another MCP client at `https://<host>/mcp`.
 This is the **live API** path. To hit a WIP or branch API on your laptop,
 run the CLI locally instead — see the README and [clients](../clients.md).
 
-The published image is `ghcr.io/fetch-hive/mcp-gateway` (**amd64 / x86_64
-musl** only today). It is distroless: there is no shell, so platforms must not
-rely on `$PORT` expansion in `CMD`. The binary reads `PORT` itself.
+The published image is `ghcr.io/fetch-hive/mcp-gateway` (**linux/amd64**,
+x86_64 musl, distroless). There is no shell, so platforms must not rely on
+`$PORT` expansion in `CMD`. The binary reads `PORT` itself. [`docker/Dockerfile`](../../docker/Dockerfile)
+is what the release workflow builds.
 
 ## What you set
 

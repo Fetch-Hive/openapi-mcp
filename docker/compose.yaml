@@ -1,5 +1,6 @@
 # Example compose for a local or VPS MCP Gateway. TLS is the reverse proxy's job.
-# Image is amd64 musl. Distroless nonroot is uid 65532 — chown named volumes
+# Image is linux/amd64, published to GHCR with each release. Distroless nonroot
+# is uid 65532 — chown named volumes
 # (`docker run --rm -v gateway-data:/data busybox chown 65532:65532 /data`)
 # if `serve` cannot write config.
 services:

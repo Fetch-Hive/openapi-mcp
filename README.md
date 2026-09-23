@@ -65,23 +65,21 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 
 ## Install
 
-Order: Homebrew → Docker → npx → curl|sh → cargo.
-
 ```bash
 # Homebrew — use the fully qualified name (Homebrew 6 trusts only this formula).
 # `brew tap` then `brew install mcp-gateway` is refused until you `brew trust`.
 brew install Fetch-Hive/tap/mcp-gateway
 
-# Docker
+# Docker (linux/amd64 image published with each release)
 docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.6.0 version
 
-# npx (optionalDependencies, no postinstall)
+# npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version
 
-# curl | sh (after the first GitHub Release)
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Fetch-Hive/openapi-mcp/releases/latest/download/mcp-gateway-installer.sh | sh
+# GitHub Release installer
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Fetch-Hive/openapi-mcp/releases/latest/download/mcp-gateway-cli-installer.sh | sh
 
-# From source
+# From a checkout of this repo
 cargo install --path crates/mcp-gateway-cli
 ```
 

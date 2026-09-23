@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Sync workspace version + GHCR image pins. Run before you commit a release.
+# Sync the workspace version, GHCR image pins, and the npm wrapper version.
+# Run before you commit a release.
 #
 #   ./scripts/bump-version.sh 0.5.0
 #   ./scripts/bump-version.sh v0.5.0 --dry-run
@@ -54,6 +55,7 @@ IMAGE_FILES=(
 )
 
 python3 - "$ROOT" "$VERSION" "$DRY_RUN" "${IMAGE_FILES[@]}" <<'PY'
+import json
 import pathlib
 import re
 import sys
@@ -117,11 +119,20 @@ for rel in image_files:
     updated = image_re.sub(replacement, body)
     image_updates.append((path, body, updated))
 
+npm_path = root / "npm" / "package.json"
+npm = json.loads(npm_path.read_text())
+npm["version"] = new
+for name in npm.get("optionalDependencies", {}):
+    npm["optionalDependencies"][name] = new
+new_npm = json.dumps(npm, indent=2) + "\n"
+old_npm = npm_path.read_text()
+
 print(f"workspace {old} -> {new}")
 print(f"Cargo.lock workspace crates rewritten: {changed_lock}")
 for path, body, updated in image_updates:
     n = 0 if body == updated else body.count("ghcr.io/fetch-hive/mcp-gateway:")
     print(f"  {path.relative_to(root)}: {n} image pin(s)")
+print(f"  npm/package.json: {npm['version']}")
 
 if dry:
     print("dry-run: no files written")
@@ -134,6 +145,8 @@ if new_lock != lock_text:
 for path, body, updated in image_updates:
     if updated != body:
         path.write_text(updated)
+if new_npm != old_npm:
+    npm_path.write_text(new_npm)
 PY
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -143,4 +156,5 @@ fi
 (cd "$ROOT" && cargo metadata --format-version 1 --locked --offline >/dev/null)
 
 echo "bump-version: $VERSION"
-echo "next: commit, push main, tag v$VERSION, publish ghcr.io/fetch-hive/mcp-gateway:$VERSION"
+echo "next: commit, push main, tag v$VERSION"
+echo "the tag's Release workflow publishes ghcr.io/fetch-hive/mcp-gateway:$VERSION and @fetch-hive/mcp-gateway"

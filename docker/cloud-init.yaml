@@ -1,5 +1,5 @@
 #cloud-config
-# Hetzner Cloud user_data. amd64 only. Replace TOKEN and SPEC_URL.
+# Hetzner Cloud user_data. amd64 only. Replace TOKEN, SPEC_URL, and the image tag.
 # Optional: attach a Volume and mount it at /mnt/data, then bind that to /data.
 package_update: true
 packages:

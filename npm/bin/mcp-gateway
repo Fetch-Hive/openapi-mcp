@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 "use strict";
-// No postinstall. Resolve a platform optionalDependency binary.
+// No postinstall. Resolve the platform package npm installed for this machine.
 const { spawnSync } = require("node:child_process");
 const { existsSync } = require("node:fs");
 const { join } = require("node:path");
@@ -26,7 +26,7 @@ try {
   bin = join(__dirname, "..", "node_modules", pkg, binName);
 }
 if (!existsSync(bin)) {
-  console.error(`mcp-gateway: missing ${pkg}. Install with npm (optionalDependencies, no lifecycle scripts).`);
+  console.error(`mcp-gateway: missing ${pkg}. Install with npm so the optional dependency for ${plat} is included.`);
   process.exit(1);
 }
 const result = spawnSync(bin, process.argv.slice(2), { stdio: "inherit" });
