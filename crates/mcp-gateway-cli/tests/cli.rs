@@ -67,7 +67,8 @@ fn help_all_lists_hidden() {
         .assert()
         .success()
         .stdout(predicate::str::contains("compile <SPEC>"))
-        .stdout(predicate::str::contains("list-tools"));
+        .stdout(predicate::str::contains("list-tools"))
+        .stdout(predicate::str::contains("serve, tunnel, doctor"));
 }
 
 #[test]
@@ -856,4 +857,137 @@ fn serve_port_env_listens_all_interfaces() {
         connected,
         "serve should honor PORT={port} (config bind is 127.0.0.1:8787)"
     );
+}
+
+#[test]
+fn tunnel_help_lists_stdio_and_the_remote_flag() {
+    bin()
+        .args(["tunnel", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--stdio"))
+        .stdout(predicate::str::contains("--allow-remote-upstream"))
+        .stdout(predicate::str::contains("--tunnel-auth"))
+        .stdout(predicate::str::contains("--no-probe"));
+}
+
+#[test]
+fn tunnel_requires_a_url_or_stdio() {
+    bin()
+        .args(["tunnel"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("URL"));
+}
+
+#[test]
+fn tunnel_rejects_a_url_and_stdio_together() {
+    bin()
+        .args(["tunnel", "http://127.0.0.1:9/mcp", "--stdio", "--", "true"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn tunnel_bind_conflicts_with_a_url() {
+    bin()
+        .args(["tunnel", "http://127.0.0.1:9/mcp", "--bind", "127.0.0.1:9"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn tunnel_refuses_a_public_address_without_the_flag() {
+    bin()
+        .args(["tunnel", "http://1.1.1.1/mcp"])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("--allow-remote-upstream"));
+}
+
+#[test]
+fn tunnel_refuses_aws_imds_v6_even_with_the_flag() {
+    bin()
+        .args([
+            "tunnel",
+            "--allow-remote-upstream",
+            "http://[fd00:ec2::254]/mcp",
+        ])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("blocked"));
+}
+
+#[test]
+fn tunnel_refuses_metadata_even_with_the_flag() {
+    bin()
+        .args([
+            "tunnel",
+            "--allow-remote-upstream",
+            "http://169.254.169.254/mcp",
+        ])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("blocked"));
+}
+
+#[test]
+fn tunnel_name_is_rejected() {
+    let (dir, cfg, _token) = primed();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "tunnel",
+            "--name",
+            "petstore",
+            "--no-probe",
+            "http://127.0.0.1:9/mcp",
+        ])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .env("MCP_GATEWAY_RELAY_URL", "ws://127.0.0.1:1/v1/tunnel")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "persistent names are not available yet",
+        ));
+    drop(dir);
+}
+
+#[test]
+fn tunnel_stdio_without_a_command_is_usage() {
+    bin()
+        .args(["tunnel", "--stdio"])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("pass the stdio command after"));
+}
+
+#[test]
+fn tunnel_stdio_missing_program_is_upstream() {
+    let (dir, cfg, _token) = primed();
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "tunnel",
+            "--stdio",
+            "--",
+            "/no/such/mcp-gateway-child",
+        ])
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .assert()
+        .failure()
+        .code(4)
+        .stderr(predicate::str::contains("failed to start"));
+    drop(dir);
 }

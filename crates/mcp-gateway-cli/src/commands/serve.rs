@@ -229,6 +229,8 @@ pub async fn run(
         env!("CARGO_PKG_VERSION"),
         &tunnel_screen::local_http_url(&authority, &path),
         tunnel_auth == TunnelAuth::Public,
+        None,
+        &[],
         &stats,
     );
     if allow_private && !out.json && !out.quiet {
@@ -293,7 +295,7 @@ pub async fn run(
     }
 }
 
-fn emit_tunnel(out: &Output, state: &TunnelState) {
+pub(crate) fn emit_tunnel(out: &Output, state: &TunnelState) {
     if !out.json {
         if let TunnelState::Rejected { code, message } = state {
             out.err_line(&format!("tunnel rejected ({code}): {message}"));
@@ -319,7 +321,7 @@ fn emit_tunnel(out: &Output, state: &TunnelState) {
     print_event(&value);
 }
 
-fn emit_request(
+pub(crate) fn emit_request(
     out: &Output,
     request: &FinishedRequest,
     screen: &mut TunnelScreen,
@@ -337,13 +339,13 @@ fn emit_request(
     screen.apply_request(request, stats);
 }
 
-fn print_event(value: &serde_json::Value) {
+pub(crate) fn print_event(value: &serde_json::Value) {
     if let Ok(line) = serde_json::to_string(value) {
         println!("{line}");
     }
 }
 
-fn reject_cli(code: &str, message: &str) -> CliError {
+pub(crate) fn reject_cli(code: &str, message: &str) -> CliError {
     let text = format!("tunnel rejected ({code}): {message}");
     match code {
         "unauthorized" | "plan_limit" => CliError::policy(text),
@@ -377,7 +379,7 @@ pub(crate) fn prepare_tunnel(
     })
 }
 
-fn loopback_authority(addr: SocketAddr) -> String {
+pub(crate) fn loopback_authority(addr: SocketAddr) -> String {
     match addr.ip() {
         IpAddr::V4(ip) if ip.is_unspecified() => format!("127.0.0.1:{}", addr.port()),
         IpAddr::V6(ip) if ip.is_unspecified() => format!("[::1]:{}", addr.port()),
@@ -386,7 +388,7 @@ fn loopback_authority(addr: SocketAddr) -> String {
     }
 }
 
-fn init_tracing(level: &str) {
+pub(crate) fn init_tracing(level: &str) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         let fallback = if level.is_empty() { "info" } else { level };
         EnvFilter::new(fallback)

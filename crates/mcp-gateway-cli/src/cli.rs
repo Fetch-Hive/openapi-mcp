@@ -122,6 +122,47 @@ pub enum Commands {
         #[arg(long)]
         url: Option<String>,
     },
+    /// Expose any Streamable HTTP or stdio MCP server through an anonymous tunnel.
+    Tunnel {
+        /// Upstream Streamable HTTP URL, for example http://127.0.0.1:8000/mcp.
+        #[arg(
+            value_name = "URL",
+            required_unless_present = "stdio",
+            conflicts_with = "stdio"
+        )]
+        url: Option<String>,
+        /// Run a stdio MCP server. The command and its arguments follow `--`.
+        #[arg(long, conflicts_with = "url")]
+        stdio: bool,
+        /// Command and arguments. Only valid after `--` and only with `--stdio`.
+        #[arg(
+            last = true,
+            required = false,
+            num_args = 1..,
+            allow_hyphen_values = true,
+            value_name = "CMD",
+            requires = "stdio"
+        )]
+        command: Vec<String>,
+        /// How remote clients authenticate to this proxy.
+        #[arg(long, value_enum, default_value_t = ProxyAuth::Token)]
+        tunnel_auth: ProxyAuth,
+        /// Bearer token for token mode, or the upstream token sent on the passthrough probe.
+        #[arg(long, env = "MCP_GATEWAY_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        /// Local listen address for --stdio. Default 127.0.0.1:8787.
+        #[arg(long, value_name = "ADDR", conflicts_with = "url")]
+        bind: Option<String>,
+        /// Persistent name. Not available yet.
+        #[arg(long = "name", value_name = "SLUG", hide = true)]
+        name: Option<String>,
+        /// Skip the initialize and tools/list probe.
+        #[arg(long)]
+        no_probe: bool,
+        /// Allow an upstream that resolves to a public address.
+        #[arg(long)]
+        allow_remote_upstream: bool,
+    },
     /// Run local health checks.
     Doctor {
         name: Option<String>,
@@ -242,6 +283,16 @@ pub enum TunnelAuth {
     Public,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ProxyAuth {
+    /// Require Authorization: Bearer and strip it before the upstream sees it.
+    Token,
+    /// Do not check Authorization. Forward the header upstream.
+    Passthrough,
+    /// Do not check Authorization. Strip it. The URL is public.
+    Public,
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ClientKind {
     Cursor,
@@ -258,7 +309,7 @@ pub enum ClientKind {
 pub fn print_help_all() {
     println!(
         "mcp-gateway operator CLI plus hidden aliases.\n\n\
-Visible commands:\n  init, add-spec, list, inspect, auth, serve, doctor, test, logs, version, upgrade\n\n\
+Visible commands:\n  init, add-spec, list, inspect, auth, serve, tunnel, doctor, test, logs, version, upgrade\n\n\
 Hidden aliases (--help-all):\n  compile <SPEC> [--out ir.json] [--report report.json]\n  list-tools <ir.json> [--tag TAG]\n  call <ir.json> <tool_name> --args '<json>' [--base-url URL] [--bearer-env VAR] [--allow-disabled]\n  corpus [--only ID]\n"
     );
 }

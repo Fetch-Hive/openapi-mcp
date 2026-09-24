@@ -6,7 +6,9 @@ mod cidrs;
 mod classify;
 mod resolver;
 
-pub use cidrs::{ipv4_denied, ipv6_denied, IPV4_DENY_ROWS, IPV6_DENY_ROWS};
+pub use cidrs::{
+    ipv4_denied, ipv6_denied, is_metadata_v4, is_metadata_v6, IPV4_DENY_ROWS, IPV6_DENY_ROWS,
+};
 pub use classify::{is_blocked_ip, pin_url, unwrap_ip, Pinned, SsrfError, SsrfPolicy};
 pub use resolver::{HickoryResolver, MapResolver, Resolver, SystemResolver};
 

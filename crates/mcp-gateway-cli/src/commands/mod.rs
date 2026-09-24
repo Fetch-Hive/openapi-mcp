@@ -6,6 +6,7 @@ mod logs;
 mod serve;
 mod spec;
 mod test_cmd;
+mod tunnel;
 mod tunnel_screen;
 mod upgrade;
 mod version;
@@ -86,6 +87,33 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
                 allow_insecure_http,
                 base_url,
                 url,
+            )
+            .await
+        }
+        Commands::Tunnel {
+            url,
+            stdio,
+            command,
+            tunnel_auth,
+            token,
+            bind,
+            name,
+            no_probe,
+            allow_remote_upstream,
+        } => {
+            tunnel::run(
+                &paths,
+                &cli.globals,
+                out,
+                url,
+                stdio,
+                command,
+                tunnel_auth,
+                token,
+                bind,
+                name,
+                no_probe,
+                allow_remote_upstream,
             )
             .await
         }

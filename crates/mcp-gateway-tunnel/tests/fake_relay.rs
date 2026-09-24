@@ -583,3 +583,135 @@ async fn inflight_limit_is_429_without_calling_the_service() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     handle.shutdown.cancel();
 }
+
+#[derive(Clone, Default)]
+struct Proxied {
+    hits: Arc<AtomicUsize>,
+    auth: Arc<std::sync::Mutex<Option<String>>>,
+    path: Arc<std::sync::Mutex<String>>,
+}
+
+#[tokio::test]
+async fn http_upstream_through_the_relay_strips_the_gateway_token() {
+    let proxied = Proxied::default();
+    let state = proxied.clone();
+    let app = Router::new()
+        .route(
+            "/custom",
+            post(
+                |State(state): State<Proxied>, request: axum::extract::Request| async move {
+                    state.hits.fetch_add(1, Ordering::SeqCst);
+                    let (parts, body) = request.into_parts();
+                    let bytes = axum::body::to_bytes(body, 1024 * 1024).await.unwrap();
+                    *state.path.lock().unwrap() = parts.uri.to_string();
+                    *state.auth.lock().unwrap() = parts
+                        .headers
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .map(str::to_owned);
+                    bytes
+                },
+            ),
+        )
+        .with_state(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let upstream = mcp_gateway_tunnel::upstream::HttpUpstream::connect(
+        &format!("http://{upstream_addr}/custom?x=1"),
+        false,
+    )
+    .await
+    .unwrap();
+    let gate = mcp_gateway_tunnel::upstream::AuthGate::new(
+        mcp_gateway_tunnel::upstream::ProxyAuth::Token,
+        Some("secret".into()),
+        upstream,
+    );
+
+    let (tx, rx) = oneshot::channel();
+    let tx = Arc::new(std::sync::Mutex::new(Some(tx)));
+    let addr = listen({
+        let tx = tx.clone();
+        move |mut ws: WebSocket| {
+            let tx = tx.clone();
+            async move {
+                let _ = recv_text(&mut ws).await;
+                send_json(&mut ws, &welcome()).await;
+                send_json(
+                    &mut ws,
+                    &Frame::RequestStart {
+                        id: 1,
+                        method: "POST".into(),
+                        path: MCP_PATH.into(),
+                        query: None,
+                        headers: vec![("content-type".into(), "application/json".into())],
+                        body_complete: true,
+                        body: Some(STANDARD.encode(b"{\"id\":1}")),
+                        client_ip: "203.0.113.9".into(),
+                        request_id: "req-1".into(),
+                    },
+                )
+                .await;
+                let denied = recv_text(&mut ws).await;
+                send_json(
+                    &mut ws,
+                    &Frame::RequestStart {
+                        id: 2,
+                        method: "POST".into(),
+                        path: MCP_PATH.into(),
+                        query: None,
+                        headers: vec![
+                            ("content-type".into(), "application/json".into()),
+                            ("authorization".into(), "Bearer secret".into()),
+                            ("cookie".into(), "a=b".into()),
+                        ],
+                        body_complete: true,
+                        body: Some(STANDARD.encode(b"{\"id\":2}")),
+                        client_ip: "203.0.113.9".into(),
+                        request_id: "req-2".into(),
+                    },
+                )
+                .await;
+                let allowed = recv_text(&mut ws).await;
+                let _ = tx.lock().unwrap().take().unwrap().send((denied, allowed));
+            }
+        }
+    })
+    .await;
+    let handle = run(cfg(addr), gate);
+    let (denied, allowed) = tokio::time::timeout(Duration::from_secs(5), rx)
+        .await
+        .unwrap()
+        .unwrap();
+    let denied: Frame = serde_json::from_str(&denied).unwrap();
+    match denied {
+        Frame::ResponseStart {
+            status,
+            body_complete,
+            body,
+            ..
+        } => {
+            assert_eq!(status, 401);
+            assert!(body_complete);
+            let text = String::from_utf8(STANDARD.decode(body.unwrap()).unwrap()).unwrap();
+            assert!(text.contains("missing authorization"), "{text}");
+        }
+        other => panic!("{other:?}"),
+    }
+    let allowed: Frame = serde_json::from_str(&allowed).unwrap();
+    match allowed {
+        Frame::ResponseStart { status, body, .. } => {
+            assert_eq!(status, 200);
+            let bytes = STANDARD.decode(body.unwrap()).unwrap();
+            assert_eq!(bytes, b"{\"id\":2}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(proxied.hits.load(Ordering::SeqCst), 1);
+    assert_eq!(proxied.path.lock().unwrap().as_str(), "/custom?x=1");
+    assert!(proxied.auth.lock().unwrap().is_none());
+    handle.shutdown.cancel();
+}

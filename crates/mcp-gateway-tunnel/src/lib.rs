@@ -8,6 +8,7 @@ mod client;
 mod reconnect;
 mod session;
 mod stats;
+pub mod upstream;
 
 use std::future::Future;
 use std::time::Duration;

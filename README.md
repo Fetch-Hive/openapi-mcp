@@ -60,6 +60,14 @@ export MCP_GATEWAY_TOKEN=…
 mcp-gateway serve demo --tunnel
 ```
 
+The same tunnel also sits in front of an MCP server this CLI did not
+compile: a Streamable HTTP URL, or a stdio server.
+
+```bash
+mcp-gateway tunnel http://127.0.0.1:8000/mcp
+mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tmp
+```
+
 Details: [Tunnel](docs/tunnel.md).
 
 ## Deploy
@@ -85,7 +93,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker (linux/amd64 and linux/arm64)
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.7.2 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.8.0 version
 
 # npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version

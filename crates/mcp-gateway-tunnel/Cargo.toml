@@ -7,8 +7,15 @@ description = "MCP Gateway tunnel client. Dials the relay and forwards /mcp to a
 repository.workspace = true
 homepage.workspace = true
 
+[[bin]]
+name = "stdio_fixture"
+path = "src/bin/stdio_fixture.rs"
+test = false
+doc = false
+
 [dependencies]
 mcp-gateway-tunnel-proto.workspace = true
+mcp-gateway-proxy.workspace = true
 axum = { workspace = true, features = ["ws", "json"] }
 base64.workspace = true
 bytes.workspace = true
@@ -16,12 +23,15 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 http.workspace = true
 http-body-util.workspace = true
 rand.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
 serde_json.workspace = true
+subtle.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 tower.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 axum = { workspace = true, features = ["ws"] }

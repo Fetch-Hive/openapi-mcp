@@ -13,6 +13,7 @@ mcp-gateway auth add NAME --type none|bearer|basic|api_key_header|api_key_query|
 mcp-gateway auth list [NAME]
 mcp-gateway auth remove NAME
 mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--tunnel] [--tunnel-auth token|public] [--base-url URL] [--url HTTPS_URL]
+mcp-gateway tunnel (<URL> | --stdio -- CMD...) [--tunnel-auth token|passthrough|public] [--token TOKEN] [--bind ADDR] [--no-probe] [--allow-remote-upstream]
 mcp-gateway doctor [NAME] [--offline] [--json]
 mcp-gateway test NAME TOOL [--args JSON] [--timeout SECS] [--base-url URL]
 mcp-gateway logs [--since RFC3339] [--tool TOOL]
@@ -84,3 +85,34 @@ not exit. They dial again. Ctrl-C exits 130.
 The client waits 10 seconds for `Welcome`. Retry delays, the lease key, and
 the public status bodies are in [Tunnel](tunnel.md). Framing and close
 codes are in [Tunnel protocol](tunnel-protocol.md).
+
+## tunnel
+
+`mcp-gateway tunnel` exposes a Streamable HTTP MCP server, or a stdio MCP
+server, through the same anonymous relay. `serve NAME --tunnel` is a
+different command: it compiles an OpenAPI spec. `--tunnel-auth` here is
+`token` (default), `passthrough`, or `public`. `passthrough` is not accepted
+by `serve`.
+
+```bash
+mcp-gateway tunnel http://127.0.0.1:8000/mcp
+mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tmp
+```
+
+A URL and `--stdio` together exit 1. Neither argument exits 1. `--bind` with
+a URL exits 1. The stdio default bind is `127.0.0.1:8787` and the path is
+`/mcp`. `--name` exits 1 with "persistent names are not available yet".
+
+Loopback, RFC1918, and IPv6 ULA are allowed on any port.
+`--allow-remote-upstream` is required for a public address (exit 1 without
+it). Metadata and the other outbound denylist ranges stay refused.
+`--allow-private-networks` does not change that check. Timeouts, the 502 and
+504 bodies, header stripping, id remapping, and the stdio restart cap are in
+[Tunnel](tunnel.md#any-mcp-server).
+
+Token mode with an empty `MCP_GATEWAY_TOKEN` draws a 43-character base64url
+token and shows it once. `--json` and `--quiet` print
+`MCP_GATEWAY_TOKEN=<token>` on stderr and do not put it in the JSON events.
+`--no-probe` skips the HTTP `initialize` / `tools/list` check. The stdio
+bridge still sends one `initialize`, because later `initialize` calls are
+answered from that cache.

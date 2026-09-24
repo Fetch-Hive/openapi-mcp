@@ -15,7 +15,8 @@ Fetch Hive infrastructure. Point the CLI at another relay with
 
 This release is anonymous only. There is no `mcp-gateway login`, no
 `tunnels` command, and `--name` exits with "persistent names are not
-available yet".
+available yet". `mcp-gateway tunnel` exposes a Streamable HTTP server or a
+stdio server you already run. `serve NAME --tunnel` is unchanged.
 
 ## 30-second quickstart
 
@@ -313,6 +314,179 @@ This release has no OAuth on the tunnel. They are not a supported path
 unless the product can send a bearer header or you opt into
 `--tunnel-auth public` and accept the warning.
 
+## Any MCP server
+
+`mcp-gateway tunnel` is the same anonymous relay client as `serve --tunnel`,
+in front of a server this process did not compile.
+
+```bash
+mcp-gateway tunnel http://127.0.0.1:8000/mcp
+mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tmp
+```
+
+Pass a URL or `--stdio`, not both. `--bind` is only valid with `--stdio`.
+The default bind is `127.0.0.1:8787`, path `/mcp`. `--name` exits 1 with
+"persistent names are not available yet" before any socket opens.
+
+### Where the process will dial
+
+Startup resolves the URL once with the system resolver. Every address in
+that answer must pass the check below. The process then pins the first
+address in the list for the life of the process. Later DNS answers are not
+used. The client does not read `HTTP_PROXY`, `HTTPS_PROXY`, or `ALL_PROXY`.
+
+Allowed without a flag: loopback (`127.0.0.0/8`, `::1`), RFC1918
+(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), and IPv6 ULA (`fc00::/7`),
+on any port. `serve` uses a different outbound check: loopback is refused
+and the only open ports are 80, 443, and 8443. `tunnel` does not call that
+check.
+
+A public address is refused until you pass `--allow-remote-upstream`. Exit 1.
+The error names the address and the flag. Addresses the outbound denylist
+already blocks stay refused with that flag too. Exit 1. The error says the
+address is blocked. That includes `169.254.169.254`, `168.63.129.16`,
+`100.100.100.200`, and AWS IMDSv6 `fd00:ec2::254`. `fd00:ec2::254` is inside
+ULA (`fc00::/7`) and is still refused. Other ULA addresses stay allowed.
+Documentation ranges and benchmarking ranges are refused the same way. A scheme other than `http` or `https`, a
+URL with a username or password, or port 0 is the same exit. DNS failure is
+exit 4: `could not resolve <host>: <error>`.
+
+`--allow-private-networks` does not change this check.
+
+### HTTP upstream
+
+The client is reqwest on rustls. Connect budget is 5 seconds. The whole
+request, including a `text/event-stream` body, ends at 60 seconds. Idle
+pooled connections are dropped after 90 seconds. Redirects are not followed:
+a 301 or 302 is returned with that status.
+
+The relay path `/mcp` is replaced by the URL you passed, including its query.
+The incoming query is dropped. `Host` is the upstream authority. Hop-by-hop
+headers (`Connection`, `Keep-Alive`, `TE`, `Trailer`, `Transfer-Encoding`,
+`Upgrade`, and any `Proxy-*`), `Cookie`, and `Content-Length` are dropped.
+`Accept`, `Content-Type`, `Mcp-Session-Id`, `MCP-Protocol-Version`,
+`Last-Event-ID`, and `Authorization` are copied when they are still present.
+`User-Agent` is `mcp-gateway/<version> (<os>-<arch>)` unless the request
+already has one.
+
+A connection failure is HTTP 502. A timeout is HTTP 504. Both bodies are
+
+```json
+{"jsonrpc":"2.0","error":{"code":-32001,"message":"upstream unreachable"},"id":null}
+```
+
+with `upstream timeout` in the 504 body. Stderr also prints `upstream: ` and
+the client error. HTTPS uses the webpki root set. A private CA fails the
+handshake and becomes that 502.
+
+Before the tunnel opens, the CLI `POST`s `initialize` with
+`protocolVersion` `2025-06-18`, then `notifications/initialized`, then
+`tools/list`. `Accept` is `application/json, text/event-stream`. A
+`text/event-stream` body is parsed from its `data:` lines. Failure exits 4
+and prints whether the server is running and whether the path is Streamable
+HTTP. The older SSE transport (`GET /sse` and `POST /messages`) is not
+proxied. `--no-probe` skips those three calls. The Probe row then says
+`skipped`.
+
+### Auth
+
+`--tunnel-auth token` is the default. If `--token` and `MCP_GATEWAY_TOKEN`
+are both empty, the process draws 32 bytes from the OS CSPRNG and encodes
+them as base64url with no padding (43 characters). That value stays in
+memory. It is not written to config and it is not a field on `--json`
+events. A terminal shows it in the Auth row as `bearer <token>` for the
+session. `--json` and `--quiet` print `MCP_GATEWAY_TOKEN=<token>` once on
+stderr. A token you passed is not printed again. Prefer the environment
+variable: `--token` puts the secret in the process arguments.
+
+Token mode compares `Authorization: Bearer` in constant time when the
+lengths match. A missing header, a value that is not UTF-8, or a scheme
+other than the exact prefix `Bearer ` is HTTP 401, `WWW-Authenticate: Bearer`,
+and `missing authorization`. A different length, or the same length that
+does not match, is `invalid authorization`. The header is removed before
+the upstream or the child sees the request. On the wire the relay is in
+`token` mode, so a missing `Authorization` is rejected by the relay and
+never reaches this process.
+
+`--tunnel-auth passthrough` does not check and does not remove
+`Authorization`. The relay is told `public`, because relay `token` mode
+answers 401 itself when the header is missing and the upstream would never
+see that request. The Auth row reads
+`passthrough, upstream sees the caller's Authorization`. The probe sends
+`Authorization: Bearer` only in this mode, and only when `--token` or
+`MCP_GATEWAY_TOKEN` is set.
+
+`--tunnel-auth public` does not check and does remove `Authorization`. The
+relay is `public`. The Auth row uses the same sentence as `serve --tunnel`.
+`--json` or `--quiet` prints
+`warning: this tunnel URL is reachable by anyone on the internet with no token`
+on stderr.
+
+### stdio
+
+`--stdio` takes everything after `--` as the child command.
+`stdin` and `stdout` are newline-delimited JSON-RPC. The child's stderr is
+copied here with the prefix `stdio: `. The child inherits this process's
+environment. `MCP_GATEWAY_TOKEN` is removed before the child is spawned.
+The first stdout line that is not
+JSON prints
+`warning: stdio child wrote a non-JSON line; further non-JSON lines are discarded`.
+
+Startup sends one `initialize` (`protocolVersion` `2025-06-18`,
+`capabilities` `{}`, `clientInfo.name` `mcp-gateway`, `clientInfo.version`
+this build) and one `notifications/initialized`. Each of those calls, and
+the startup `tools/list`, waits 60 seconds. If the child does not answer,
+the CLI exits 4 with `<method> timed out after 60 seconds` and does not
+start the child again. That `InitializeResult` is
+cached. Every later `initialize` returns the cache with the caller's `id`
+and is not written to the child. The child's protocol version is whatever
+it returned; it is not negotiated again. A remote
+`notifications/initialized` is HTTP 202 with an empty body and is not
+written to the child. Other remote notifications are written through and
+answered with HTTP 202.
+
+Other requests replace `id` with a monotonic `u64` so two clients can reuse
+an id. The response puts the caller's `id` back. The wait is 60 seconds,
+then HTTP 504 `upstream timeout`. That id is dropped, so a late child
+response for it is discarded. A body over 1048576 bytes is HTTP 413
+`body exceeds 1048576 bytes`. A JSON array is HTTP 400
+`JSON-RPC batches are not accepted`. `GET /mcp` is HTTP 405 with an empty
+body. `DELETE /mcp` is HTTP 200 with an empty body. Neither is written to
+the child.
+
+A stdout line with both `method` and `id` is a request from the child
+(`sampling/createMessage`, `roots/list`, elicitation, and anything else).
+The bridge writes back JSON-RPC `-32601` and
+`server requests are not bridged`, and prints
+`warning: child request <method> is not bridged; answered with JSON-RPC -32601`.
+A child notification (no `id`, including `notifications/tools/list_changed`)
+is discarded. The first time each method is seen, stderr prints
+`warning: child notification <method> was discarded`. Remote clients are
+not told.
+
+If the child exits, in-flight HTTP calls get 502 `upstream unreachable`.
+The process is started again after 200ms, then 400ms, 800ms, 1600ms, and
+3200ms. The cached initialize result is replaced by the new child's result.
+A sixth exit inside the same 60 seconds stops the CLI with exit 4. A child
+that answers `initialize` or `tools/list` with a JSON-RPC error also exits 4
+and does not retry. A command that cannot be spawned exits 4 immediately.
+`--no-probe` still sends the startup `initialize` (the cache needs it) and
+skips the startup `tools/list`. The Probe row then ends with
+`tools/list skipped`.
+
+One child, one session. Responses are read in order. There is no second
+stdio session and no server-to-client request forwarded to the remote MCP
+client.
+
+### Screen
+
+The header is the eight `serve --tunnel` rows plus two: `Upstream` and
+`Probe`, inserted between Auth and Lease. A pinned header is 10 rows and
+needs a terminal at least 13 rows tall and wider than the longest row. A
+generated token lives in the Auth row so the clear does not erase it.
+`--json` still prints one compact object per line for `tunnel` and
+`request` events, and does not draw the screen.
+
 ## Hosted and open source
 
 | | Where it lives |
@@ -349,6 +523,43 @@ Fetch Hive Studio rows used released `mcp-gateway` 0.7.1 on the same relay. 0.7.
 | MCP Inspector | `npx @modelcontextprotocol/inspector --cli` 2.8.0, `--transport http` | yes | pass, 2026-09-24 | `initialize` returned protocol `2025-11-25` and server `0.7.0`. `tools/list` returned 18 tools. `tools/call` `logout_user` returned `User logged out`. `get_inventory` is `isError` with `structuredContent.error_code` `"upstream_5xx"` while `outputSchema` says the values are integers; Inspector 2.8.0 then exits with `data/error_code must be integer`. `get_pet_by_id` returns the tool result and then exits `tool_is_error` because `isError` is true. |
 | ngrok or cloudflared in front of `serve` | generic TCP/HTTP tunnel | n/a | not a supported path | See below. |
 | Fetch Hive Studio | Settings → Connected MCP servers | yes | pass, 2026-09-25 | `app.fetchhive.com` against released `mcp-gateway` 0.7.1. Connected `https://<slug>.mcp.fetchhive.com/mcp` with auth type Access token. Test Connection returned `Connection successful` and 18 tools (`update_pet`, `add_pet`, `find_pets_by_status`, `find_pets_by_tags`, `get_pet_by_id`, and 13 more). The server was saved as `petstore-tunnel-test`, then removed. A Studio agent did not call `logout_user`. |
+
+## Generic proxy
+
+`mcp-gateway tunnel` was checked from this working tree against production
+`wss://connect.mcp.fetchhive.com/v1/tunnel`. `mcp-gateway version` on that
+binary still prints `0.7.2`. Each process was stopped after the calls, and
+the anonymous slug was released.
+
+### Streamable HTTP
+
+FastMCP 4.0.9 on Python 3.14.2. The server name was `weather-server`,
+version `1.2.0`, stateless JSON at `http://127.0.0.1:8791/mcp`, one tool
+`fh_ping`.
+
+| Client | Result | Notes |
+|---|---|---|
+| curl | pass, 2026-09-25 | `initialize` HTTP 200, `serverInfo.name` `weather-server`, `serverInfo.version` `1.2.0`. `tools/list` HTTP 200, tool names `fh_ping`. `tools/call` `fh_ping` with `{"name":"ada"}` returned text `pong ada` and `isError` false. |
+| OpenAI Responses API | pass, 2026-09-25 | Model `gpt-6-astra`, `require_approval` `never`, `allowed_tools` `["fh_ping"]`, `headers.Authorization` `Bearer <token>`. HTTP 200, status `completed`. Output items were `mcp_list_tools` with `fh_ping`, `mcp_call` `fh_ping` output `pong ada`, then a message `pong ada`. |
+| Cursor | pass, 2026-09-25 | Agent CLI 2026.09.23-86fc751. An isolated project `.cursor/mcp.json` used `type` `http` and `Authorization` `Bearer ${env:MCP_GATEWAY_TOKEN}`. `agent -p --trust --approve-mcps` returned `User rejected MCP: fh-weather-fh_ping`. The same prompt with `--force` replied `pong ada`. |
+
+### stdio
+
+```bash
+mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem <dir>
+```
+
+The child reported `secure-filesystem-server` version `0.2.0`. `tools/list`
+returned 14 tools: `read_file`, `read_text_file`, `read_media_file`,
+`read_multiple_files`, `write_file`, `edit_file`, `create_directory`,
+`list_directory`, `list_directory_with_sizes`, `directory_tree`,
+`move_file`, `search_files`, `get_file_info`, `list_allowed_directories`.
+
+| Client | Result | Notes |
+|---|---|---|
+| curl | pass, 2026-09-25 | `initialize` HTTP 200. `tools/call` `read_text_file` on a file whose contents are `stdio-ok` plus a trailing newline returned that text. The result had no `isError` field. |
+| OpenAI Responses API | pass, 2026-09-25 | Model `gpt-6-astra`, `require_approval` `never`, `allowed_tools` `["read_text_file"]`. HTTP 200, status `completed`. `mcp_list_tools` listed `read_text_file`. `mcp_call` output was `stdio-ok` plus a trailing newline. The following message was `stdio-ok`. |
+| Cursor | pass, 2026-09-25 | Agent CLI 2026.09.23-86fc751 with `--trust --approve-mcps --force` in an isolated project. The reply was `stdio-ok`. |
 
 ## Why not ngrok or cloudflared?
 

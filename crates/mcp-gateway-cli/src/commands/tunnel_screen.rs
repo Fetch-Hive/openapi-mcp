@@ -1,9 +1,10 @@
-//! Human status screen for `serve --tunnel`.
+//! Human status screen for `serve --tunnel` and `tunnel`.
 //!
-//! A terminal at least 11 rows tall, and wide enough for the auth line, pins
-//! eight header rows with DECSTBM and scrolls request lines under them.
-//! Any other stdout gets the same lines as normal text. `--json` and `--quiet`
-//! draw nothing here.
+//! A terminal at least three rows taller than the header, and wide enough for
+//! the longest header line, pins the header with DECSTBM and scrolls request
+//! lines under it. `serve --tunnel` has eight header rows. `tunnel` inserts
+//! extra rows between Auth and Lease. Any other stdout gets the same lines as
+//! normal text. `--json` and `--quiet` draw nothing here.
 
 use mcp_gateway_tunnel::{FinishedRequest, Stats, TunnelState};
 use std::io::{self, IsTerminal, Write};
@@ -39,7 +40,8 @@ pub struct TunnelScreen {
     version: String,
     local_url: String,
     remote_url: String,
-    public_auth: bool,
+    auth: String,
+    extras: Vec<(String, String)>,
     status: String,
 }
 
@@ -49,24 +51,34 @@ impl TunnelScreen {
         version: &str,
         local_url: &str,
         public_auth: bool,
+        auth_override: Option<&str>,
+        extras: &[(&str, &str)],
         stats: &Stats,
     ) -> Self {
+        let auth = auth_override
+            .unwrap_or_else(|| auth_value(public_auth))
+            .to_owned();
+        let extras = extras
+            .iter()
+            .map(|(label, value)| ((*label).to_owned(), (*value).to_owned()))
+            .collect::<Vec<_>>();
         let mut screen = Self {
             mode: Mode::Off,
             version: version.to_owned(),
             local_url: local_url.to_owned(),
             remote_url: "waiting".to_owned(),
-            public_auth,
+            auth,
+            extras,
             status: status_text(&TunnelState::Connecting),
         };
         if out.json || out.quiet {
             return screen;
         }
+        let header_rows = screen.header_rows();
         screen.mode = if io::stdout().is_terminal() {
             match terminal_size::terminal_size() {
                 Some((terminal_size::Width(cols), terminal_size::Height(rows)))
-                    if rows >= HEADER_ROWS + 3
-                        && cols as usize > widest_header_line(public_auth) =>
+                    if rows >= header_rows + 3 && cols as usize > screen.widest() =>
                 {
                     Mode::Pinned { rows }
                 }
@@ -100,11 +112,13 @@ impl TunnelScreen {
                 let mut buf = line;
                 buf.push('\n');
                 write_stdout(&buf);
-                self.redraw_rows(stats, &[HEADER_ROWS]);
+                self.redraw_rows(stats, &[self.header_rows()]);
             }
             Mode::Plain => {
                 println!("{line}");
-                println!("{}", self.lines(stats)[(HEADER_ROWS as usize) - 1]);
+                if let Some(last) = self.lines(stats).last() {
+                    println!("{last}");
+                }
             }
             Mode::Off => {}
         }
@@ -117,8 +131,21 @@ impl TunnelScreen {
         self.mode = Mode::Off;
     }
 
+    fn header_rows(&self) -> u16 {
+        HEADER_ROWS + u16::try_from(self.extras.len()).unwrap_or(0)
+    }
+
+    fn widest(&self) -> usize {
+        let mut width = LABEL_WIDTH + self.auth.chars().count().max(LEASE.chars().count());
+        for (label, value) in &self.extras {
+            width = width.max(row(label, value).chars().count());
+        }
+        width
+    }
+
     fn paint_header(&self, stats: &Stats, full: bool) {
         let lines = self.lines(stats);
+        let count = lines.len() as u16;
         match self.mode {
             Mode::Off => {}
             Mode::Plain => {
@@ -129,7 +156,7 @@ impl TunnelScreen {
                 } else {
                     println!("{}", lines[0]);
                     println!("{}", lines[3]);
-                    println!("{}", lines[(HEADER_ROWS as usize) - 1]);
+                    println!("{}", lines[(count as usize) - 1]);
                 }
             }
             Mode::Pinned { rows } => {
@@ -139,11 +166,11 @@ impl TunnelScreen {
                         buf.push_str(line);
                         buf.push('\n');
                     }
-                    let start = HEADER_ROWS + 1;
+                    let start = count + 1;
                     buf.push_str(&format!("\x1b[{start};{rows}r\x1b[{start};1H"));
                     write_stdout(&buf);
                 } else {
-                    self.redraw_rows(stats, &[1, 4, HEADER_ROWS]);
+                    self.redraw_rows(stats, &[1, 4, count]);
                 }
             }
         }
@@ -152,25 +179,44 @@ impl TunnelScreen {
     fn redraw_rows(&self, stats: &Stats, rows: &[u16]) {
         let lines = self.lines(stats);
         let mut buf = String::new();
-        for row in rows {
-            let text = &lines[(*row as usize) - 1];
-            buf.push_str(&format!("\x1b7\x1b[{row};1H\x1b[2K{text}\x1b8"));
+        for row_number in rows {
+            let text = &lines[(*row_number as usize) - 1];
+            buf.push_str(&format!("\x1b7\x1b[{row_number};1H\x1b[2K{text}\x1b8"));
         }
         write_stdout(&buf);
     }
 
-    fn lines(&self, stats: &Stats) -> [String; HEADER_ROWS as usize] {
-        header_lines(&HeaderView {
-            status: self.status.clone(),
-            version: self.version.clone(),
-            local_url: self.local_url.clone(),
-            remote_url: self.remote_url.clone(),
-            auth: auth_value(self.public_auth).to_owned(),
-            inflight: stats.inflight.load(Ordering::SeqCst),
-            total: stats.total.load(Ordering::SeqCst),
-            reconnects: stats.reconnects.load(Ordering::SeqCst),
-        })
+    fn lines(&self, stats: &Stats) -> Vec<String> {
+        let extras = self
+            .extras
+            .iter()
+            .map(|(label, value)| (label.as_str(), value.as_str()))
+            .collect::<Vec<_>>();
+        screen_lines(
+            &HeaderView {
+                status: self.status.clone(),
+                version: self.version.clone(),
+                local_url: self.local_url.clone(),
+                remote_url: self.remote_url.clone(),
+                auth: self.auth.clone(),
+                inflight: stats.inflight.load(Ordering::SeqCst),
+                total: stats.total.load(Ordering::SeqCst),
+                reconnects: stats.reconnects.load(Ordering::SeqCst),
+            },
+            &extras,
+        )
     }
+}
+
+pub fn screen_lines(view: &HeaderView, extras: &[(&str, &str)]) -> Vec<String> {
+    let base = header_lines(view);
+    let mut lines = Vec::with_capacity(base.len() + extras.len());
+    lines.extend(base[..5].iter().cloned());
+    for (label, value) in extras {
+        lines.push(row(label, value));
+    }
+    lines.extend(base[5..].iter().cloned());
+    lines
 }
 
 pub fn header_lines(view: &HeaderView) -> [String; HEADER_ROWS as usize] {
@@ -238,14 +284,6 @@ pub fn local_http_url(authority: &str, path: &str) -> String {
     }
 }
 
-fn widest_header_line(public_auth: bool) -> usize {
-    LABEL_WIDTH
-        + auth_value(public_auth)
-            .chars()
-            .count()
-            .max(LEASE.chars().count())
-}
-
 fn row(label: &str, value: &str) -> String {
     format!("{label:<LABEL_WIDTH$}{value}")
 }
@@ -295,6 +333,28 @@ mod tests {
         );
         assert!(lines[0].starts_with("Session status"));
         assert!(lines[7].starts_with("Requests"));
+    }
+
+    #[test]
+    fn extra_rows_sit_between_auth_and_lease() {
+        let lines = screen_lines(
+            &sample(),
+            &[
+                ("Upstream", "http://127.0.0.1:8000/mcp"),
+                ("Probe", "fixture 0, 1 tools"),
+            ],
+        );
+        assert_eq!(lines.len(), 10);
+        assert_eq!(&lines[4][LABEL_WIDTH..], "bearer required");
+        assert_eq!(&lines[5][LABEL_WIDTH..], "http://127.0.0.1:8000/mcp");
+        assert_eq!(&lines[6][LABEL_WIDTH..], "fixture 0, 1 tools");
+        assert!(lines[7].starts_with("Lease"));
+        assert_eq!(lines[8], "");
+        assert!(lines[9].starts_with("Requests"));
+        assert_eq!(
+            screen_lines(&sample(), &[]),
+            header_lines(&sample()).to_vec()
+        );
     }
 
     #[test]

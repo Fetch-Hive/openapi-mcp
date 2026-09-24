@@ -1403,7 +1403,7 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mcp-gateway-cli"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -1437,7 +1437,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-compile"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "hex",
  "jsonschema",
@@ -1457,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-ir"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "schemars",
  "serde",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-proxy"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "aes-gcm",
  "async-trait",
@@ -1503,7 +1503,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-server"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-tunnel"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1539,20 +1539,24 @@ dependencies = [
  "futures-util",
  "http",
  "http-body-util",
+ "mcp-gateway-proxy",
  "mcp-gateway-tunnel-proto",
  "rand 0.8.8",
+ "reqwest",
  "serde",
  "serde_json",
+ "subtle",
  "thiserror",
  "tokio",
  "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tower",
+ "url",
 ]
 
 [[package]]
 name = "mcp-gateway-tunnel-proto"
-version = "0.7.2"
+version = "0.8.0"
 dependencies = [
  "schemars",
  "serde",
@@ -1562,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-upsell"
-version = "0.7.2"
+version = "0.8.0"
 
 [[package]]
 name = "memchr"
@@ -2194,12 +2198,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
+ "tokio-util",
  "tower",
  "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 1.0.9",
 ]
@@ -3274,6 +3280,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ef64dbcc55df09c7e5a46182d181c2cfa3e925f3da937ea764728b4bbb9dcbf"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
