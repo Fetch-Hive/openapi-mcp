@@ -6,6 +6,7 @@ mod logs;
 mod serve;
 mod spec;
 mod test_cmd;
+mod tunnel_screen;
 mod upgrade;
 mod version;
 

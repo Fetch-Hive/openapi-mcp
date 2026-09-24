@@ -136,16 +136,31 @@ relay_url = "wss://connect.mcp.fetchhive.com/v1/tunnel"
 
 ## Reconnect
 
-A dropped socket dials again. The banner line is `reconnecting tunnel…`.
-`--json` prints one object per state change:
+A dropped socket dials again. On a terminal, the status row changes to
+`reconnecting (attempt N, next dial in D)`. `N` is 0 on the first retry.
+`D` is the sleep before the next dial: `1.0s` at one second or more, otherwise
+a millisecond count such as `800ms`. That sleep is 1s, then 2, 4, 8, 16, 32,
+60, each multiplied by a random factor in [0.8, 1.2), unless a frame named an
+exact wait.
+
+`--json` does not draw the screen. Each event is one line of compact JSON:
 
 ```json
 {"event":"tunnel","state":"connecting"}
 {"event":"tunnel","state":"connected","url":"https://SLUG.mcp.fetchhive.com/mcp","slug":"SLUG"}
-{"event":"tunnel","state":"reconnecting"}
+{"event":"tunnel","state":"reconnecting","attempt":0,"delay_ms":1000}
+{"event":"request","method":"POST","status":200,"duration_ms":12}
 {"event":"tunnel","state":"rejected","code":"unauthorized","message":"…"}
 {"event":"tunnel","state":"stopped"}
 ```
+
+`attempt` matches the status row: 0 is the first retry. `delay_ms` is the
+sleep in milliseconds, truncated toward zero. `duration_ms` is the same
+truncation of the time from accept until the local call finishes. `status`
+`0` means the relay cancelled the call before the local server returned a
+status. A `429` from the in-flight cap is logged and is not included in
+`total`, because that call was refused before it ran. Every accepted call,
+including status `0`, increments `total`.
 
 | What happened | Next dial |
 |---|---|
@@ -160,9 +175,24 @@ A dropped socket dials again. The banner line is `reconnecting tunnel…`.
 | TCP, TLS, or no `Welcome` within 10 seconds | Same backoff. The relay's own deadline for `Hello` is 5 seconds. |
 
 Ctrl-C closes the WebSocket with close code `1000`, then the local
-listener, and the process exits 130. The human banner, before the URL, is
-`local server is up. waiting for the tunnel URL…`. After `Welcome` it
-prints `tunnel: <url>` and `this URL is anonymous and is released 30 minutes after the CLI disconnects`.
+listener, and the process exits 130.
+
+While that process is running, the terminal shows eight header
+rows: session status (`connecting`, `online`, or the reconnecting line
+above), CLI version, local URL `http://127.0.0.1:<port>/mcp`, remote URL
+(or `waiting` until `Welcome`), auth, the lease line
+`anonymous, released 30 minutes after disconnect`, a blank row, and
+`Requests` with `in-flight`, `total`, and `reconnects`. When stdout is a
+terminal at least 11 rows tall and wider than the auth line, those eight
+rows stay fixed and each finished call scrolls underneath as
+`METHOD STATUS DURATION` (for example `POST    200 12ms`). A pipe, or a
+terminal that is too small, prints the eight rows once, then reprints the
+status, remote URL, and requests rows on each state change, and appends one
+request line plus a requests row after each finished call. `--json` and
+`--quiet` print none of that screen. Auth is `bearer required`, or
+`public, this URL is reachable by anyone on the internet`. In `--json` or
+`--quiet` with `--tunnel-auth public`, stderr still prints
+`warning: this tunnel URL is reachable by anyone on the internet with no token`.
 
 Frame types, close codes, and the constant list are in
 [Tunnel protocol](tunnel-protocol.md).
@@ -186,6 +216,12 @@ Cursor (`.cursor/mcp.json`):
 }
 ```
 
+Cursor 3.21.18 loads this file. `agent mcp list` leaves the server unloaded
+until `agent mcp enable petstore`. After that, `agent mcp list-tools petstore`
+returns the tool names. A non-interactive `agent -p` run rejects the tool
+call with `User rejected MCP: petstore-logout_user` until the same command
+includes `--force`, which then receives `User logged out` from `logout_user`.
+
 Claude Code:
 
 ```bash
@@ -193,14 +229,13 @@ claude mcp add --transport http petstore https://SLUG.mcp.fetchhive.com/mcp \
   --header "Authorization: Bearer $MCP_GATEWAY_TOKEN"
 ```
 
-Claude Code 2.1.281 connects when `tools/list` includes `ttlMs` `0` and
-`cacheScope` `private`. `claude mcp list` reports Connected, and a prompt
-that calls `logout_user` receives `User logged out`. That check used a local
-build of this tree through the production relay. Released `mcp-gateway`
-0.7.0 omits both fields, and Claude Code 2.1.281 then rejects `tools/list`
-(`ttlMs` must be a number; `cacheScope` must be `public` or `private`). A
-server added to a project `.mcp.json` stays unused until
-`.claude/settings.json` sets `enabledMcpjsonServers` or
+Claude Code 2.1.281 connects to `mcp-gateway` 0.7.1. `claude mcp list`
+reports Connected, and a prompt that calls `logout_user` receives
+`User logged out`. `tools/list` includes `ttlMs` `0` and `cacheScope`
+`private`. Released 0.7.0 omits both fields, and Claude Code 2.1.281 then
+rejects `tools/list` (`ttlMs` must be a number; `cacheScope` must be
+`public` or `private`). A server added to a project `.mcp.json` stays unused
+until `.claude/settings.json` sets `enabledMcpjsonServers` or
 `enableAllProjectMcpServers`.
 
 Codex (`~/.codex/config.toml`):
@@ -230,6 +265,10 @@ VS Code (`.vscode/mcp.json`):
   }
 }
 ```
+
+VS Code 1.136.0 with Copilot Chat 0.64.0 loads this file after the folder is
+trusted. In Agent mode, a prompt that calls `logout_user` receives
+`User logged out`. The chat names the server `petstore (MCP Server)`.
 
 OpenAI Responses API (`require_approval` set so the call is not interactive):
 
@@ -292,9 +331,9 @@ Checked against production `wss://connect.mcp.fetchhive.com/v1/tunnel` with
 the Petstore spec (`https://petstore3.swagger.io/api/v3/openapi.json`).
 `tools/call` used `find_pets_by_status`. A 5xx from Petstore is the upstream
 API, not the tunnel. The curl, OpenAI, Anthropic, Codex, and Inspector rows
-used released `mcp-gateway` 0.7.0. The Claude Code row used a local build of
-this tree on the same relay. Released 0.7.0 `tools/list` omits `ttlMs` and
-`cacheScope`.
+used released `mcp-gateway` 0.7.0. The Claude Code, Cursor, VS Code, and
+Fetch Hive Studio rows used released `mcp-gateway` 0.7.1 on the same relay. 0.7.1 `tools/list` includes
+`ttlMs` `0` and `cacheScope` `private`. Released 0.7.0 omits both fields.
 
 | Client | How | Headers | Result | Notes |
 |---|---|---|---|---|
@@ -302,14 +341,14 @@ this tree on the same relay. Released 0.7.0 `tools/list` omits `ttlMs` and
 | OpenAI Responses API | `tools: [{ type: "mcp", server_url, headers }]` | yes | pass, 2026-09-24 | Model `gpt-6-astra`, `require_approval: "never"`, `headers.Authorization` set to `Bearer <token>`, `allowed_tools: ["get_inventory"]`. The API returned `mcp_list_tools` with that one tool, then `mcp_call` `get_inventory`. Petstore answered HTTP 500; the gateway returned that as MCP `isError` text. The connector completed the POST path. |
 | ChatGPT connectors | UI | OAuth-first | not supported | No OAuth on the tunnel in this release. `--tunnel-auth public` is the only unauthenticated option, with the warning above. |
 | Anthropic Messages API | `mcp_servers` plus `tools: [{ type: "mcp_toolset" }]`, header `anthropic-beta: mcp-client-2025-11-20` | yes | pass, 2026-09-24 | Request model `claude-opus-5`. `authorization_token` is the raw token. The response contained `mcp_tool_use` `get_inventory` and `mcp_tool_result` with the same Petstore HTTP 500 text, then `stop_reason: end_turn`. |
-| Claude Code | `claude mcp add --transport http` | yes | pass, local build, 2026-09-24 | Claude Code 2.1.281 against a local build of this tree. `claude mcp list` reported Connected. A prompt called `logout_user` and the tool result was `User logged out`. That build's `tools/list` includes `ttlMs` `0` and `cacheScope` `private`. Released `mcp-gateway` 0.7.0 omits both fields, and Claude Code 2.1.281 rejects that `tools/list` (`ttlMs` must be a number; `cacheScope` must be `public` or `private`). A project `.mcp.json` server stays unused until `.claude/settings.json` sets `enabledMcpjsonServers` or `enableAllProjectMcpServers`; until then `claude mcp list` says `Pending approval`. |
+| Claude Code | `claude mcp add --transport http` | yes | pass, 2026-09-24 | Claude Code 2.1.281 against released `mcp-gateway` 0.7.1. `claude mcp list` reported Connected. A prompt called `logout_user` and the tool result was `User logged out`. `tools/list` includes `ttlMs` `0` and `cacheScope` `private`. Released 0.7.0 omits both fields, and Claude Code 2.1.281 rejects that `tools/list` (`ttlMs` must be a number; `cacheScope` must be `public` or `private`). A project `.mcp.json` server stays unused until `.claude/settings.json` sets `enabledMcpjsonServers` or `enableAllProjectMcpServers`; until then `claude mcp list` says `Pending approval`. |
 | Claude Desktop / claude.ai | UI | OAuth-first | not supported | Same caveat as ChatGPT. |
-| Cursor | `.cursor/mcp.json` | yes | not run | A 401 without a header may probe `/.well-known/oauth-protected-resource`. That path is a 404 with an empty body. Send the bearer header. |
+| Cursor | `.cursor/mcp.json` | yes | pass, 2026-09-24 | Cursor 3.21.18 and agent CLI 2026.09.23-86fc751 against released `mcp-gateway` 0.7.1. Project `.cursor/mcp.json` set `headers.Authorization` to `Bearer ${env:MCP_GATEWAY_TOKEN}`. `agent mcp list` showed the server as not loaded until `agent mcp enable petstore`. `agent mcp list-tools petstore` then returned 18 tools, including `logout_user`. `agent -p` without `--force` returned `User rejected MCP: petstore-logout_user`. The same prompt with `--force` called `logout_user` and the tool result was `User logged out`. A 401 without a header may probe `/.well-known/oauth-protected-resource`. That path is a 404 with an empty body. Send the bearer header. |
 | Codex | `bearer_token_env_var` and `default_tools_approval_mode = "approve"` | yes | pass, 2026-09-24 | Codex CLI 0.156.1 called `logout_user` and received `User logged out`. |
-| VS Code | `.vscode/mcp.json` `type: http` | yes | not run | VS Code 1.136.0 is installed. `code chat` opens a window and does not return a tool result to the shell, so this row has no recorded call. |
+| VS Code | `.vscode/mcp.json` `type: http` | yes | pass, 2026-09-25 | VS Code 1.136.0 and Copilot Chat 0.64.0 against released `mcp-gateway` 0.7.1. Project `.vscode/mcp.json` sent `Authorization: Bearer`. The folder must be trusted; Restricted Mode does not load the server. Agent mode, model `MAI-Code-1.1-Flash`, called `logout_user` (`petstore (MCP Server)`) and the tool result was `User logged out`. |
 | MCP Inspector | `npx @modelcontextprotocol/inspector --cli` 2.8.0, `--transport http` | yes | pass, 2026-09-24 | `initialize` returned protocol `2025-11-25` and server `0.7.0`. `tools/list` returned 18 tools. `tools/call` `logout_user` returned `User logged out`. `get_inventory` is `isError` with `structuredContent.error_code` `"upstream_5xx"` while `outputSchema` says the values are integers; Inspector 2.8.0 then exits with `data/error_code must be integer`. `get_pet_by_id` returns the tool result and then exits `tool_is_error` because `isError` is true. |
 | ngrok or cloudflared in front of `serve` | generic TCP/HTTP tunnel | n/a | not a supported path | See below. |
-| Fetch Hive Studio | attach as a workspace MCP server | yes | not run | Paste the banner URL and the bearer. |
+| Fetch Hive Studio | Settings → Connected MCP servers | yes | pass, 2026-09-25 | `app.fetchhive.com` against released `mcp-gateway` 0.7.1. Connected `https://<slug>.mcp.fetchhive.com/mcp` with auth type Access token. Test Connection returned `Connection successful` and 18 tools (`update_pet`, `add_pet`, `find_pets_by_status`, `find_pets_by_tags`, `get_pet_by_id`, and 13 more). The server was saved as `petstore-tunnel-test`, then removed. A Studio agent did not call `logout_user`. |
 
 ## Why not ngrok or cloudflared?
 
@@ -340,7 +379,7 @@ three reasons that this client avoids.
 | `429`, JSON-RPC `-32000` `too many in-flight requests`, `Retry-After: 1` | The CLI already has `max_inflight` calls running (16 unless `Welcome` said otherwise). The local API was not called. |
 | `429` `rate limit exceeded` | The relay's per-slug per-minute cap was hit (60 by default). |
 | `404` | No lease for that slug. The banner URL is the one that works. |
-| Banner says `reconnecting tunnel…` | The CLI is dialing again. The slug stays when the secret is still valid. `reclaim_expired` prints the same line and then a new `tunnel:` URL. |
+| Status says `reconnecting (attempt N, next dial in D)` | The CLI is waiting `D`, then dialing again. `N` starts at 0. The slug stays when the secret is still valid. `reclaim_expired` uses the same status and then a new remote URL. |
 | New slug after a restart | The reclaim secret is memory-only. A new process does not have it. |
 | `tunnel rejected (maintenance): could not allocate a tunnel name` | Eight slug draws were already leased. The CLI waits 1 second and tries again. |
 | `tunnel rejected (rate_limited): too many anonymous tunnels from this network` | This IP opened 10 anonymous tunnels in the current hour. The CLI waits `retry_after_secs` (3600 on the production relay). |

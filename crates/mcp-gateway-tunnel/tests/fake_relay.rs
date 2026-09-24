@@ -176,6 +176,16 @@ async fn inline_body_is_forwarded_with_loopback_host() {
     let (host, body) = seen.lock().unwrap().clone().unwrap();
     assert_eq!(host, "127.0.0.1:9");
     assert_eq!(body, payload_bytes());
+    let finished = tokio::time::timeout(Duration::from_secs(2), handle.requests.recv())
+        .await
+        .expect("request log")
+        .expect("finished request");
+    assert_eq!(finished.method, "POST");
+    assert_eq!(finished.status, 200);
+    assert_eq!(
+        handle.stats.total.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
     handle.shutdown.cancel();
 }
 
@@ -425,10 +435,12 @@ async fn goaway_reconnects_after_the_requested_delay() {
     .await;
     let mut handle = run(cfg(addr), Router::new());
     loop {
-        if matches!(*handle.state.borrow(), TunnelState::Connected { .. }) {
-            break;
+        if let TunnelState::Reconnecting { delay, .. } = handle.state.borrow().clone() {
+            if delay == Duration::from_secs(5) {
+                break;
+            }
         }
-        handle.state.changed().await.expect("first welcome");
+        handle.state.changed().await.expect("go_away wait");
     }
     tokio::time::advance(Duration::from_secs(4)).await;
     assert_eq!(connects.load(Ordering::SeqCst), 1);

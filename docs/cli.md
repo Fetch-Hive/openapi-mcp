@@ -52,18 +52,22 @@ Exit codes: `0` ok, `1` usage/config, `2` policy/SSRF/doctor-fail,
 
 `mcp-gateway serve NAME --tunnel` keeps the local server on loopback and opens
 an outbound WebSocket to `wss://connect.mcp.fetchhive.com/v1/tunnel` (override
-with `MCP_GATEWAY_RELAY_URL` or `[tunnel] relay_url` in config). The banner
-prints `https://<slug>.mcp.fetchhive.com/mcp`. That URL is anonymous and is
-released 30 minutes after the CLI disconnects. `--tunnel` cannot be combined
-with `--stdio`. `--name` is hidden and exits with "persistent names are not
-available yet".
+with `MCP_GATEWAY_RELAY_URL` or `[tunnel] relay_url` in config). The status
+screen prints `https://<slug>.mcp.fetchhive.com/mcp`. That URL is anonymous
+and is released 30 minutes after the CLI disconnects. `--tunnel` cannot be
+combined with `--stdio`. `--name` is hidden and exits with "persistent names
+are not available yet".
 
 `--tunnel-auth token` (the default) requires `MCP_GATEWAY_TOKEN` or
 `--token-file`. Remote clients must send that bearer token.
-`--tunnel-auth public` requires `--allow-anonymous` and prints a warning that
-anyone who has the URL can call the server. The tunnel banner does not print
-the hosted-login line. `--json` emits `{"event":"tunnel",...}` lines.
-Ctrl-C exits 130 after the WebSocket closes.
+`--tunnel-auth public` requires `--allow-anonymous`. The auth row then reads
+`public, this URL is reachable by anyone on the internet`. `--json` or
+`--quiet` prints
+`warning: this tunnel URL is reachable by anyone on the internet with no token`
+on stderr instead of drawing that row. The screen does not print the
+hosted-login line. `--json` emits one compact JSON object per line
+(`{"event":"tunnel",...}` and `{"event":"request","method","status","duration_ms"}`)
+and does not draw the screen. Ctrl-C exits 130 after the WebSocket closes.
 
 `MCP_GATEWAY_RELAY_URL` overrides the relay. `[tunnel] relay_url` in
 config is the fallback. The default is

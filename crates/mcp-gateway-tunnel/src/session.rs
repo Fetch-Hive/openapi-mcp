@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use base64::engine::general_purpose::STANDARD;
@@ -23,7 +24,7 @@ use tokio_tungstenite::{
 use tokio_util::sync::CancellationToken;
 
 use crate::stats::Stats;
-use crate::{LocalService, TunnelConfig};
+use crate::{FinishedRequest, LocalService, TunnelConfig};
 
 /// Largest raw slice whose standard base64 form fits in one frame.
 const RAW_CHUNK: usize = (MAX_FRAME_BYTES / 4) * 3;
@@ -53,6 +54,7 @@ pub(crate) async fn run<S: LocalService>(
     service: S,
     shutdown: CancellationToken,
     stats: Arc<Stats>,
+    requests: mpsc::UnboundedSender<FinishedRequest>,
 ) -> SessionStop {
     let reclaim = Some(Reclaim {
         slug: welcome.slug.clone(),
@@ -100,7 +102,7 @@ pub(crate) async fn run<S: LocalService>(
                                     continue;
                                 }
                                 let parts = ReqParts { id, method, path, query, headers, body_complete, body };
-                                accept_request(parts, &cfg, &service, &stats, limits.max_inflight, &out_tx, &done_tx, &mut bodies, &mut cancels);
+                                accept_request(parts, &cfg, &service, &stats, limits.max_inflight, &out_tx, &done_tx, &requests, &mut bodies, &mut cancels);
                             }
                             Frame::RequestBody { id, chunk, last } => {
                                 if let Some(tx) = bodies.get(&id) {
@@ -165,10 +167,16 @@ fn accept_request<S: LocalService>(
     max_inflight: u32,
     out_tx: &mpsc::Sender<Out>,
     done_tx: &mpsc::UnboundedSender<u64>,
+    requests: &mpsc::UnboundedSender<FinishedRequest>,
     bodies: &mut HashMap<u64, mpsc::UnboundedSender<Bytes>>,
     cancels: &mut HashMap<u64, CancellationToken>,
 ) {
     if !stats.begin_request(max_inflight) {
+        let _ = requests.send(FinishedRequest {
+            method: parts.method.clone(),
+            status: 429,
+            duration: Duration::ZERO,
+        });
         let _ = out_tx.try_send(Out::Text(frame_json(&too_busy(parts.id))));
         return;
     }
@@ -183,6 +191,11 @@ fn accept_request<S: LocalService>(
         Err(()) => {
             stats.end_request();
             cancels.remove(&parts.id);
+            let _ = requests.send(FinishedRequest {
+                method: parts.method.clone(),
+                status: 400,
+                duration: Duration::ZERO,
+            });
             let _ = out_tx.try_send(Out::Text(frame_json(&error_response(
                 parts.id,
                 400,
@@ -195,6 +208,9 @@ fn accept_request<S: LocalService>(
     let out_tx = out_tx.clone();
     let done_tx = done_tx.clone();
     let stats = stats.clone();
+    let requests = requests.clone();
+    let method = parts.method.clone();
+    let started = Instant::now();
     let id = parts.id;
     tokio::spawn(async move {
         let guard = InflightGuard {
@@ -202,15 +218,26 @@ fn accept_request<S: LocalService>(
             done: done_tx,
             id,
         };
-        tokio::select! {
-            _ = cancel.cancelled() => {}
+        let finished = tokio::select! {
+            _ = cancel.cancelled() => FinishedRequest {
+                method,
+                status: 0,
+                duration: started.elapsed(),
+            },
             response = service.call(request) => {
+                let status = response.status().as_u16();
                 if !cancel.is_cancelled() {
                     let _ = write_response(id, response, &out_tx, &cancel).await;
                 }
+                FinishedRequest {
+                    method,
+                    status,
+                    duration: started.elapsed(),
+                }
             }
-        }
+        };
         drop(guard);
+        let _ = requests.send(finished);
     });
 }
 

@@ -10,8 +10,9 @@ mod session;
 mod stats;
 
 use std::future::Future;
+use std::time::Duration;
 
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
@@ -60,16 +61,39 @@ pub struct TunnelConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TunnelState {
     Connecting,
-    Connected { slug: String, url: String },
-    Reconnecting,
-    Rejected { code: String, message: String },
+    Connected {
+        slug: String,
+        url: String,
+    },
+    /// `attempt` is 0 on the first retry. `delay` is the sleep before the next dial.
+    Reconnecting {
+        attempt: u32,
+        delay: Duration,
+    },
+    Rejected {
+        code: String,
+        message: String,
+    },
     Stopped,
+}
+
+/// One proxied `/mcp` call that has finished.
+///
+/// `status` `0` means the relay cancelled the call before the local server
+/// returned a status. `duration` is the time from accept until that finish,
+/// truncated to milliseconds by the CLI when it prints `duration_ms`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FinishedRequest {
+    pub method: String,
+    pub status: u16,
+    pub duration: Duration,
 }
 
 pub struct TunnelHandle {
     pub public_url: watch::Receiver<Option<String>>,
     pub state: watch::Receiver<TunnelState>,
     pub stats: std::sync::Arc<Stats>,
+    pub requests: mpsc::UnboundedReceiver<FinishedRequest>,
     pub shutdown: CancellationToken,
     pub done: watch::Receiver<bool>,
 }
@@ -114,16 +138,27 @@ pub fn run<S: LocalService>(config: TunnelConfig, service: S) -> TunnelHandle {
     let (url_tx, url_rx) = watch::channel(None);
     let (done_tx, done_rx) = watch::channel(false);
     let stats = std::sync::Arc::new(Stats::default());
+    let (requests_tx, requests_rx) = mpsc::unbounded_channel();
     let task_shutdown = shutdown.clone();
     let task_stats = stats.clone();
     tokio::spawn(async move {
-        reconnect::supervise(config, service, task_shutdown, state_tx, url_tx, task_stats).await;
+        reconnect::supervise(
+            config,
+            service,
+            task_shutdown,
+            state_tx,
+            url_tx,
+            task_stats,
+            requests_tx,
+        )
+        .await;
         let _ = done_tx.send(true);
     });
     TunnelHandle {
         public_url: url_rx,
         state: state_rx,
         stats,
+        requests: requests_rx,
         shutdown,
         done: done_rx,
     }

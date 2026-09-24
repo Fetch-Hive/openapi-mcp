@@ -3,13 +3,13 @@ use std::time::Duration;
 
 use mcp_gateway_tunnel_proto::Reclaim;
 use rand::Rng;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::client::{self, Handshake};
 use crate::session;
 use crate::stats::Stats;
-use crate::{LocalService, TunnelConfig, TunnelState};
+use crate::{FinishedRequest, LocalService, TunnelConfig, TunnelState};
 
 pub(crate) async fn supervise<S: LocalService>(
     cfg: TunnelConfig,
@@ -18,6 +18,7 @@ pub(crate) async fn supervise<S: LocalService>(
     state: watch::Sender<TunnelState>,
     public_url: watch::Sender<Option<String>>,
     stats: Arc<Stats>,
+    requests: mpsc::UnboundedSender<FinishedRequest>,
 ) {
     let mut reclaim: Option<Reclaim> = None;
     let mut attempt: u32 = 0;
@@ -26,16 +27,9 @@ pub(crate) async fn supervise<S: LocalService>(
             let _ = state.send(TunnelState::Stopped);
             return;
         }
-        let next = if attempt == 0 && reclaim.is_none() {
-            TunnelState::Connecting
-        } else {
-            TunnelState::Reconnecting
-        };
-        let _ = state.send(next);
-        if attempt > 0 {
-            stats
-                .reconnects
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if attempt == 0 && reclaim.is_none() && !matches!(*state.borrow(), TunnelState::Connecting)
+        {
+            let _ = state.send(TunnelState::Connecting);
         }
         match client::connect(&cfg, reclaim.as_ref()).await {
             Handshake::Open(opened) => {
@@ -51,6 +45,7 @@ pub(crate) async fn supervise<S: LocalService>(
                     service.clone(),
                     shutdown.clone(),
                     stats.clone(),
+                    requests.clone(),
                 )
                 .await;
                 if stop.shutdown {
@@ -67,25 +62,22 @@ pub(crate) async fn supervise<S: LocalService>(
                     reclaim = stop.reclaim;
                 }
                 let delay = stop.after.unwrap_or_else(|| backoff_delay(attempt));
-                attempt = attempt.saturating_add(1);
-                if !sleep_or_shutdown(&shutdown, delay).await {
-                    let _ = state.send(TunnelState::Stopped);
+                if !wait_retry(&shutdown, &state, &stats, attempt, delay, true).await {
                     return;
                 }
+                attempt = attempt.saturating_add(1);
             }
             Handshake::ReclaimAgain => {
                 reclaim = None;
                 let delay = backoff_delay(attempt);
-                attempt = attempt.saturating_add(1);
-                if !sleep_or_shutdown(&shutdown, delay).await {
-                    let _ = state.send(TunnelState::Stopped);
+                if !wait_retry(&shutdown, &state, &stats, attempt, delay, true).await {
                     return;
                 }
+                attempt = attempt.saturating_add(1);
             }
             Handshake::Wait(delay) => {
                 attempt = 0;
-                if !sleep_or_shutdown(&shutdown, delay).await {
-                    let _ = state.send(TunnelState::Stopped);
+                if !wait_retry(&shutdown, &state, &stats, attempt, delay, false).await {
                     return;
                 }
             }
@@ -98,13 +90,36 @@ pub(crate) async fn supervise<S: LocalService>(
             }
             Handshake::Failed => {
                 let delay = backoff_delay(attempt);
-                attempt = attempt.saturating_add(1);
-                if !sleep_or_shutdown(&shutdown, delay).await {
-                    let _ = state.send(TunnelState::Stopped);
+                if !wait_retry(&shutdown, &state, &stats, attempt, delay, true).await {
                     return;
                 }
+                attempt = attempt.saturating_add(1);
             }
         }
+    }
+}
+
+/// Sleep `delay`, publishing `Reconnecting` first. Counts one reconnect when
+/// `count` is set. Returns false when shutdown wins the sleep.
+async fn wait_retry(
+    shutdown: &CancellationToken,
+    state: &watch::Sender<TunnelState>,
+    stats: &Stats,
+    attempt: u32,
+    delay: Duration,
+    count: bool,
+) -> bool {
+    if count {
+        stats
+            .reconnects
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+    let _ = state.send(TunnelState::Reconnecting { attempt, delay });
+    if sleep_or_shutdown(shutdown, delay).await {
+        true
+    } else {
+        let _ = state.send(TunnelState::Stopped);
+        false
     }
 }
 

@@ -1,3 +1,4 @@
+use super::tunnel_screen::{self, TunnelScreen};
 use super::{load_cfg, spec};
 use crate::cli::{Globals, TunnelAuth};
 use crate::config::GatewayConfig;
@@ -10,7 +11,7 @@ use mcp_gateway_server::{
     build_router, parse_bind, serve_http, serve_listener, serve_stdio, validate_http_serve,
     HttpServeOptions,
 };
-use mcp_gateway_tunnel::{EndpointAuthMode, TunnelState};
+use mcp_gateway_tunnel::{EndpointAuthMode, FinishedRequest, TunnelState};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
@@ -151,20 +152,15 @@ pub async fn run(
         out.bold("transport:")
     ));
     out.line(&out.dim("────────"));
-    if tunnel {
-        out.line("local server is up. waiting for the tunnel URL…");
-        if tunnel_auth == TunnelAuth::Public {
-            out.err_line(
-                "warning: this tunnel URL is reachable by anyone on the internet with no token",
-            );
-        }
-    } else {
+    if !tunnel {
         out.line(&format!(
             "listening. paste into Cursor, Codex, or Claude Code: `mcp-gateway inspect {name} --client cursor`"
         ));
         out.line(&mcp_gateway_upsell::serve_boot_banner());
+    } else if tunnel_auth == TunnelAuth::Public && (out.json || out.quiet) {
+        eprintln!("warning: this tunnel URL is reachable by anyone on the internet with no token");
     }
-    if allow_private {
+    if allow_private && (!tunnel || out.json || out.quiet) {
         out.err_line(
             "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback.",
         );
@@ -209,7 +205,7 @@ pub async fn run(
         return Err(CliError::usage("tunnel did not start"));
     };
     if out.json {
-        out.json_value(&serde_json::json!({"event":"tunnel","state":"connecting"}));
+        print_event(&serde_json::json!({"event":"tunnel","state":"connecting"}));
     }
     let handle = mcp_gateway_tunnel::run(tunnel_cfg, tunnel_app);
     let shutdown = handle.shutdown.clone();
@@ -223,10 +219,25 @@ pub async fn run(
     let mcp_gateway_tunnel::TunnelHandle {
         mut state,
         mut done,
+        mut requests,
         shutdown,
+        stats,
         ..
     } = handle;
+    let mut screen = TunnelScreen::open(
+        out,
+        env!("CARGO_PKG_VERSION"),
+        &tunnel_screen::local_http_url(&authority, &path),
+        tunnel_auth == TunnelAuth::Public,
+        &stats,
+    );
+    if allow_private && !out.json && !out.quiet {
+        eprintln!(
+            "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback."
+        );
+    }
     let mut interrupted = false;
+    let mut requests_open = true;
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -240,22 +251,32 @@ pub async fn run(
                 }
                 let snapshot = state.borrow().clone();
                 emit_tunnel(out, &snapshot);
+                screen.apply_state(&snapshot, &stats);
                 if let TunnelState::Rejected { code, message } = snapshot {
                     shutdown.cancel();
+                    screen.finish();
                     let _ = tokio::time::timeout(Duration::from_secs(2), server).await;
                     return Err(reject_cli(&code, &message));
+                }
+            }
+            finished = requests.recv(), if requests_open => {
+                match finished {
+                    Some(request) => emit_request(out, &request, &mut screen, &stats),
+                    None => requests_open = false,
                 }
             }
             _ = done.changed() => {
                 let snapshot = state.borrow().clone();
                 if let TunnelState::Rejected { code, message } = snapshot {
                     shutdown.cancel();
+                    screen.finish();
                     return Err(reject_cli(&code, &message));
                 }
                 break;
             }
         }
     }
+    screen.finish();
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
         while !*done.borrow() {
             if done.changed().await.is_err() {
@@ -273,37 +294,52 @@ pub async fn run(
 }
 
 fn emit_tunnel(out: &Output, state: &TunnelState) {
-    if out.json {
-        let value = match state {
-            TunnelState::Connecting => serde_json::json!({"event":"tunnel","state":"connecting"}),
-            TunnelState::Connected { url, slug } => {
-                serde_json::json!({"event":"tunnel","state":"connected","url":url,"slug":slug})
-            }
-            TunnelState::Reconnecting => {
-                serde_json::json!({"event":"tunnel","state":"reconnecting"})
-            }
-            TunnelState::Rejected { code, message } => {
-                serde_json::json!({"event":"tunnel","state":"rejected","code":code,"message":message})
-            }
-            TunnelState::Stopped => serde_json::json!({"event":"tunnel","state":"stopped"}),
-        };
-        out.json_value(&value);
-        return;
-    }
-    match state {
-        TunnelState::Connected { url, .. } => {
-            out.line(&format!("{} {url}", out.bold("tunnel:")));
-            out.line(
-                &out.dim(
-                    "this URL is anonymous and is released 30 minutes after the CLI disconnects",
-                ),
-            );
-        }
-        TunnelState::Reconnecting => out.line(&out.dim("reconnecting tunnel…")),
-        TunnelState::Rejected { code, message } => {
+    if !out.json {
+        if let TunnelState::Rejected { code, message } = state {
             out.err_line(&format!("tunnel rejected ({code}): {message}"));
         }
-        TunnelState::Connecting | TunnelState::Stopped => {}
+        return;
+    }
+    let value = match state {
+        TunnelState::Connecting => serde_json::json!({"event":"tunnel","state":"connecting"}),
+        TunnelState::Connected { url, slug } => {
+            serde_json::json!({"event":"tunnel","state":"connected","url":url,"slug":slug})
+        }
+        TunnelState::Reconnecting { attempt, delay } => serde_json::json!({
+            "event": "tunnel",
+            "state": "reconnecting",
+            "attempt": attempt,
+            "delay_ms": tunnel_screen::duration_ms(*delay),
+        }),
+        TunnelState::Rejected { code, message } => {
+            serde_json::json!({"event":"tunnel","state":"rejected","code":code,"message":message})
+        }
+        TunnelState::Stopped => serde_json::json!({"event":"tunnel","state":"stopped"}),
+    };
+    print_event(&value);
+}
+
+fn emit_request(
+    out: &Output,
+    request: &FinishedRequest,
+    screen: &mut TunnelScreen,
+    stats: &mcp_gateway_tunnel::Stats,
+) {
+    if out.json {
+        print_event(&serde_json::json!({
+            "event": "request",
+            "method": request.method,
+            "status": request.status,
+            "duration_ms": tunnel_screen::duration_ms(request.duration),
+        }));
+        return;
+    }
+    screen.apply_request(request, stats);
+}
+
+fn print_event(value: &serde_json::Value) {
+    if let Ok(line) = serde_json::to_string(value) {
+        println!("{line}");
     }
 }
 
