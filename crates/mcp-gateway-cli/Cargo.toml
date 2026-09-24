@@ -21,6 +21,7 @@ mcp-gateway-compile.workspace = true
 mcp-gateway-proxy = { workspace = true, features = ["self-host"] }
 mcp-gateway-server = { workspace = true, features = ["self-host"] }
 mcp-gateway-upsell.workspace = true
+mcp-gateway-tunnel.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

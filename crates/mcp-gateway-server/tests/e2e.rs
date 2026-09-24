@@ -81,6 +81,7 @@ fn opts(expose: bool, token: Option<&str>, anon: bool) -> HttpServeOptions {
         bearer_token: token.map(ToOwned::to_owned),
         allow_anonymous: anon,
         path: "/mcp".into(),
+        extra_allowed_hosts: Vec::new(),
     }
 }
 

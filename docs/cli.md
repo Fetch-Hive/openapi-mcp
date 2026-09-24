@@ -12,7 +12,7 @@ mcp-gateway auth add NAME --type none|bearer|basic|api_key_header|api_key_query|
              (--from-env VAR | --from-file PATH)
 mcp-gateway auth list [NAME]
 mcp-gateway auth remove NAME
-mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--base-url URL] [--url HTTPS_URL]
+mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--tunnel] [--tunnel-auth token|public] [--base-url URL] [--url HTTPS_URL]
 mcp-gateway doctor [NAME] [--offline] [--json]
 mcp-gateway test NAME TOOL [--args JSON] [--timeout SECS] [--base-url URL]
 mcp-gateway logs [--since RFC3339] [--tool TOOL]
@@ -50,9 +50,16 @@ Exit codes: `0` ok, `1` usage/config, `2` policy/SSRF/doctor-fail,
 
 ## Tunnel
 
-`serve` can expose the local Streamable HTTP server through an outbound
-WebSocket, so a remote MCP client calls `https://<slug>.mcp.fetchhive.com/mcp`
-while the process keeps listening on loopback. Anonymous tunnels need no
-account. The framing, slug rules, limits, and close codes are specified in
-[Tunnel protocol](tunnel-protocol.md). The CLI flag and banner ship with the
-anonymous client; this page stays the command reference.
+`mcp-gateway serve NAME --tunnel` keeps the local server on loopback and opens
+an outbound WebSocket to `wss://connect.mcp.fetchhive.com/v1/tunnel` (override
+with `MCP_GATEWAY_RELAY_URL` or `[tunnel] relay_url` in config). The banner
+prints `https://<slug>.mcp.fetchhive.com/mcp`. That URL is anonymous and is
+released 30 minutes after the CLI disconnects. `--tunnel` cannot be combined
+with `--stdio`. `--name` is hidden and exits with "persistent names are not
+available yet".
+
+`--tunnel-auth token` (the default) requires `MCP_GATEWAY_TOKEN` or
+`--token-file`. Remote clients must send that bearer token.
+`--tunnel-auth public` requires `--allow-anonymous` and prints a warning that
+anyone who has the URL can call the server. Do not pass a login upsell on this
+banner. Framing and close codes are in [Tunnel protocol](tunnel-protocol.md).

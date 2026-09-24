@@ -338,6 +338,75 @@ fn serve_stdio_initialize_and_list_tools() {
 }
 
 #[test]
+fn serve_help_lists_tunnel_flags() {
+    bin()
+        .args(["serve", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--tunnel"))
+        .stdout(predicate::str::contains("--tunnel-auth"))
+        .stdout(predicate::str::contains("--name").not());
+}
+
+#[test]
+fn serve_tunnel_conflicts_with_stdio() {
+    let (_dir, cfg, token) = primed();
+    bin()
+        .env("MCP_GATEWAY_TOKEN", &token)
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "serve",
+            "petstore",
+            "--tunnel",
+            "--stdio",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("stdio"));
+}
+
+#[test]
+fn serve_tunnel_without_token_is_usage_error() {
+    let (_dir, cfg, _) = primed();
+    bin()
+        .env_remove("MCP_GATEWAY_TOKEN")
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "serve",
+            "petstore",
+            "--tunnel",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("MCP_GATEWAY_TOKEN"));
+}
+
+#[test]
+fn serve_tunnel_name_is_rejected() {
+    let (_dir, cfg, token) = primed();
+    bin()
+        .env("MCP_GATEWAY_TOKEN", &token)
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "serve",
+            "petstore",
+            "--tunnel",
+            "--name",
+            "pets",
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "persistent names are not available yet",
+        ));
+}
+
+#[test]
 fn serve_without_token_exits_1() {
     let (_dir, cfg, _) = primed();
     bin()

@@ -8,6 +8,7 @@ members = [
   "crates/mcp-gateway-cli",
   "crates/mcp-gateway-upsell",
   "crates/mcp-gateway-tunnel-proto",
+  "crates/mcp-gateway-tunnel",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ mcp-gateway-proxy = { path = "crates/mcp-gateway-proxy" }
 mcp-gateway-server = { path = "crates/mcp-gateway-server" }
 mcp-gateway-upsell = { path = "crates/mcp-gateway-upsell" }
 mcp-gateway-tunnel-proto = { path = "crates/mcp-gateway-tunnel-proto" }
+mcp-gateway-tunnel = { path = "crates/mcp-gateway-tunnel" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
@@ -47,6 +49,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls-pki-types = "1"
 webpki-roots = "0.26"
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 hickory-resolver = { version = "0.25", features = ["tokio"] }
 ipnet = "2.9"
 idna = "1"

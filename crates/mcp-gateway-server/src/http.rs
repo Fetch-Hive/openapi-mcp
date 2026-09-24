@@ -23,6 +23,9 @@ pub struct HttpServeOptions {
     pub bearer_token: Option<String>,
     pub allow_anonymous: bool,
     pub path: String,
+    /// Extra `Host` values the MCP SDK accepts. The tunnel rewrites `Host` to
+    /// the bound loopback authority, which includes the port.
+    pub extra_allowed_hosts: Vec<String>,
 }
 
 impl Default for HttpServeOptions {
@@ -33,6 +36,7 @@ impl Default for HttpServeOptions {
             bearer_token: None,
             allow_anonymous: false,
             path: "/mcp".into(),
+            extra_allowed_hosts: Vec::new(),
         }
     }
 }
@@ -78,6 +82,9 @@ pub fn build_router(handler: GatewayHandler, opts: &HttpServeOptions) -> Result<
             "[::1]".into(),
             "::1".into(),
         ];
+        rmcp_config
+            .allowed_hosts
+            .extend(opts.extra_allowed_hosts.iter().cloned());
     }
     // Legacy clients (initialize, no per-request `_meta`) and 2026-07-28
     // clients share this endpoint. Requiring metadata rejects Cursor, VS Code,
@@ -106,6 +113,16 @@ pub fn build_router(handler: GatewayHandler, opts: &HttpServeOptions) -> Result<
         ))
         .layer(from_fn_with_state(auth, bearer_gate))
         .with_state(mcp))
+}
+
+pub async fn serve_listener(
+    listener: tokio::net::TcpListener,
+    app: Router,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<(), std::io::Error> {
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
 }
 
 pub async fn serve_http(

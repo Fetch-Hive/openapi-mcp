@@ -92,6 +92,16 @@ pub enum Commands {
         name: String,
         #[arg(long)]
         stdio: bool,
+        /// Public anonymous URL at https://<slug>.mcp.fetchhive.com/mcp.
+        /// Uses the HTTP transport; do not combine with --stdio.
+        #[arg(long, conflicts_with = "stdio")]
+        tunnel: bool,
+        /// Persistent name. Not available yet.
+        #[arg(long = "name", value_name = "SLUG", hide = true, requires = "tunnel")]
+        tunnel_name: Option<String>,
+        /// How remote MCP clients authenticate. `public` needs --allow-anonymous.
+        #[arg(long, value_enum, default_value_t = TunnelAuth::Token, requires = "tunnel")]
+        tunnel_auth: TunnelAuth,
         #[arg(long)]
         bind: Option<String>,
         #[arg(long, default_value = "/mcp")]
@@ -222,6 +232,14 @@ pub enum AuthType {
     ApiKeyQuery,
     #[clap(name = "custom_headers")]
     CustomHeaders,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum TunnelAuth {
+    /// Remote clients must send the local MCP bearer token.
+    Token,
+    /// Remote clients may omit Authorization. Requires --allow-anonymous.
+    Public,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

@@ -9,5 +9,5 @@ mod stdio;
 
 pub use bind::{is_loopback_bind, parse_bind, validate_http_serve, BindError};
 pub use handler::{GatewayHandler, LiveExecutor, LocalGateway, UpstreamExecutor};
-pub use http::{build_router, serve_http, HttpServeOptions};
+pub use http::{build_router, serve_http, serve_listener, HttpServeOptions};
 pub use stdio::serve_stdio;

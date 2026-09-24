@@ -24,6 +24,9 @@ ttl = "168h"
 file = ""
 level = "info"
 
+# [tunnel]
+# relay_url = "wss://connect.mcp.fetchhive.com/v1/tunnel"  # optional; $MCP_GATEWAY_RELAY_URL wins
+
 # [[specs]]
 # name = "petstore"
 # url = "https://petstore3.swagger.io/api/v3/openapi.json"

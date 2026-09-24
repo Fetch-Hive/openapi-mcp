@@ -18,6 +18,9 @@ pub struct GatewayConfig {
     pub cache: CacheConfig,
     #[serde(default)]
     pub log: LogConfig,
+    /// Relay URL for `serve --tunnel`. Empty uses $MCP_GATEWAY_RELAY_URL, then the production default.
+    #[serde(default, skip_serializing_if = "TunnelFile::is_unset")]
+    pub tunnel: TunnelFile,
     #[serde(default)]
     pub specs: Vec<SpecEntry>,
 }
@@ -91,6 +94,19 @@ pub struct LogConfig {
 
 fn default_level() -> String {
     "info".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct TunnelFile {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub relay_url: String,
+}
+
+impl TunnelFile {
+    fn is_unset(file: &Self) -> bool {
+        file.relay_url.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
