@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TARGETS, assetName, packRelease, publishPacked } from "./publish-npm.mjs";
+import { TARGETS, assetName, packRelease, publishPacked, readWrapperPackage } from "./publish-npm.mjs";
 
 test("packs a wrapper plus one binary package per release archive", () => {
   const assets = mkdtempSync(path.join(tmpdir(), "mcp-gateway-assets-"));
@@ -26,14 +26,15 @@ test("packs a wrapper plus one binary package per release archive", () => {
     }
 
     const out = mkdtempSync(path.join(tmpdir(), "mcp-gateway-npm-"));
-    const packed = packRelease({ version: "0.6.0", assetsDir: assets, outDir: out });
+    const version = readWrapperPackage().version;
+    const packed = packRelease({ version, assetsDir: assets, outDir: out });
     const meta = JSON.parse(readFileSync(path.join(packed.metaDir, "package.json"), "utf8"));
     assert.equal(meta.name, "@fetch-hive/mcp-gateway");
-    assert.equal(meta.version, "0.6.0");
+    assert.equal(meta.version, version);
     assert.equal(meta.bin["mcp-gateway"], "bin/mcp-gateway");
     assert.equal(Object.keys(meta.optionalDependencies).length, TARGETS.length);
     for (const target of TARGETS) {
-      assert.equal(meta.optionalDependencies[target.pkg], "0.6.0");
+      assert.equal(meta.optionalDependencies[target.pkg], version);
       const dir = path.join(out, target.pkg.split("/").pop());
       const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
       assert.equal(pkg.os[0], target.os);
