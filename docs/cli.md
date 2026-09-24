@@ -61,5 +61,22 @@ available yet".
 `--tunnel-auth token` (the default) requires `MCP_GATEWAY_TOKEN` or
 `--token-file`. Remote clients must send that bearer token.
 `--tunnel-auth public` requires `--allow-anonymous` and prints a warning that
-anyone who has the URL can call the server. Do not pass a login upsell on this
-banner. Framing and close codes are in [Tunnel protocol](tunnel-protocol.md).
+anyone who has the URL can call the server. The tunnel banner does not print
+the hosted-login line. `--json` emits `{"event":"tunnel",...}` lines.
+Ctrl-C exits 130 after the WebSocket closes.
+
+`MCP_GATEWAY_RELAY_URL` overrides the relay. `[tunnel] relay_url` in
+config is the fallback. The default is
+`wss://connect.mcp.fetchhive.com/v1/tunnel`. An empty token in token mode
+exits 1 and names `MCP_GATEWAY_TOKEN`, `--token-file`, or
+`--tunnel-auth public`. `--name` exits 1 before any socket opens.
+
+A terminal `Rejected` exits 2 for `unauthorized` and `plan_limit`, 1 for
+`version_unsupported` and `name_taken` / `name_invalid` / `name_reserved`,
+and 4 for every other code. Stderr is `tunnel rejected (<code>): <message>`.
+`reclaim_expired`, `reclaim_invalid`, `rate_limited`, and `maintenance` do
+not exit. They dial again. Ctrl-C exits 130.
+
+The client waits 10 seconds for `Welcome`. Retry delays, the lease key, and
+the public status bodies are in [Tunnel](tunnel.md). Framing and close
+codes are in [Tunnel protocol](tunnel-protocol.md).

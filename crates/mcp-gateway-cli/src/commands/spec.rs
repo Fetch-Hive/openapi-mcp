@@ -229,6 +229,9 @@ pub fn inspect(
         } else {
             out.line(&format!("Paste into {}", snippet.paste_into));
             out.line(&snippet.body);
+            out.line(&out.dim(&format!(
+                "Remote: run `mcp-gateway serve {name} --tunnel` and replace the URL above with the printed https://<slug>.mcp.fetchhive.com/mcp. See docs/tunnel.md."
+            )));
         }
         return Ok(ExitCode::Ok);
     }

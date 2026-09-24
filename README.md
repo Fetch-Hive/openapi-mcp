@@ -48,6 +48,20 @@ mcp-gateway inspect demo --client cursor
 Or skip operating a process: [hosted MCP Gateway](https://fetchhive.com/mcp?utm_source=github&utm_medium=readme&utm_campaign=openapi_mcp).
 PaaS / VPS: [deploy](docs/deploy/README.md).
 
+### 3. Local server, remote client
+
+The process stays on loopback. An outbound tunnel gives you
+`https://<slug>.mcp.fetchhive.com/mcp` for OpenAI, Claude, Cursor, and any
+other client that can send a bearer header. No account. The URL is released
+30 minutes after the CLI exits.
+
+```bash
+export MCP_GATEWAY_TOKEN=…
+mcp-gateway serve demo --tunnel
+```
+
+Details: [Tunnel](docs/tunnel.md).
+
 ## Deploy
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Fetch-Hive/openapi-mcp)
@@ -71,7 +85,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker (linux/amd64 and linux/arm64)
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.6.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.7.0 version
 
 # npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version
@@ -96,6 +110,7 @@ vulnerabilities to security@fetchhive.com — see `SECURITY.md`.
 ## Docs
 
 - [Connect Cursor, Codex, Claude Code](docs/clients.md)
+- [Tunnel (local server, public URL)](docs/tunnel.md)
 - [CLI reference](docs/cli.md)
 - [Config schema](docs/config.md)
 - [Deploy (PaaS + VPS)](docs/deploy/README.md)

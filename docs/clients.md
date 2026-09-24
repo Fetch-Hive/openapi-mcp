@@ -35,6 +35,18 @@ Codex uses `url` + `bearer_token_env_var`. OAuth is not implemented.
 After a PaaS deploy, take the same snippet and replace the URL with
 `https://<your-host>/mcp`.
 
+## Remote tunnel URL
+
+`mcp-gateway serve NAME --tunnel` prints
+`https://<slug>.mcp.fetchhive.com/mcp`. `inspect --client` still prints the
+loopback URL, then a line telling you to swap it. Keep the bearer header.
+Full steps, limits, and which clients can send that header:
+[Tunnel](tunnel.md).
+
+Claude Desktop (`--client claude`) stays on stdio. A remote client needs the
+HTTP snippet (`cursor`, `claude-code`, `codex`, `vscode`) with the tunnel
+URL.
+
 ## Raw HTTP (no MCP client)
 
 The Streamable HTTP transport accepts both eras on `/mcp`:

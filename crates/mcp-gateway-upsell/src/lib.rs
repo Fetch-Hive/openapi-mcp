@@ -9,7 +9,9 @@ pub fn readme_paragraph() -> String {
 }
 
 pub fn serve_boot_banner() -> String {
-    format!("Hosted MCP Gateway with tokens, quotas, and a dashboard: {CLOUD_URL}")
+    format!(
+        "Hosted MCP Gateway with tokens, quotas, and a dashboard: {CLOUD_URL}. Or expose this process with `mcp-gateway serve NAME --tunnel`."
+    )
 }
 
 pub fn upgrade_success_line() -> String {

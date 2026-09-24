@@ -16,11 +16,23 @@ Platform paths:
 
 | Platform | Config | IR cache |
 |---|---|---|
-| Linux | `$XDG_CONFIG_HOME/mcp-gateway/config.toml` | `$XDG_CACHE_HOME/mcp-gateway/ir` |
-| macOS | `~/Library/Application Support/mcp-gateway/config.toml` | `~/Library/Caches/mcp-gateway/ir` |
-| Windows | `%APPDATA%\mcp-gateway\config.toml` | `%LOCALAPPDATA%\mcp-gateway\ir` |
+| Linux | `$XDG_CONFIG_HOME/mcp-gateway/config.toml`, or `~/.config/mcp-gateway/config.toml` when that variable is unset | `$XDG_CACHE_HOME/mcp-gateway/ir`, or `~/.cache/mcp-gateway/ir` |
+| macOS | `~/Library/Application Support/com.fetchhive.mcp-gateway/config.toml` | `~/Library/Caches/com.fetchhive.mcp-gateway/ir` |
+| Windows | `%APPDATA%\fetchhive\mcp-gateway\config\config.toml` | `%LOCALAPPDATA%\fetchhive\mcp-gateway\cache\ir` |
+
+The log file sits next to local data: `~/.local/share/mcp-gateway/mcp-gateway.jsonl`
+on Linux (`$XDG_DATA_HOME` when set),
+`~/Library/Application Support/com.fetchhive.mcp-gateway/mcp-gateway.jsonl`
+on macOS, and `%LOCALAPPDATA%\fetchhive\mcp-gateway\data\mcp-gateway.jsonl`
+on Windows. `ProjectDirs` is called as `("com", "fetchhive", "mcp-gateway")`.
+Linux uses the application name only. macOS joins all three with dots.
+Windows uses `fetchhive\mcp-gateway`.
 
 `$MCP_GATEWAY_CONFIG` and `--config` override the config path.
+
+`[tunnel] relay_url` is optional. `serve --tunnel` uses
+`$MCP_GATEWAY_RELAY_URL` when that is set, then this field, then
+`wss://connect.mcp.fetchhive.com/v1/tunnel`. See [Tunnel](tunnel.md).
 
 PaaS (`serve` on Heroku / Render / DigitalOcean): if `--bind` is omitted and
 `PORT` is set, the process listens on `0.0.0.0:$PORT` with `--expose` (the

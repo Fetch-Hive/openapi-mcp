@@ -30,7 +30,8 @@ or trimmed excerpts.
 
 ## Pull requests
 
-- This repository is the CLI and libraries. Quota, dashboard, and
-  multi-tenant APIs are out of scope.
+- This repository is the CLI and libraries, including the tunnel client
+  and `mcp-gateway-tunnel-proto`. The production relay is hosted. Quota,
+  dashboard, and multi-tenant APIs are out of scope.
 - Do not weaken the default SSRF policy. Private-network access is
   `--allow-private-networks` behind the `self-host` Cargo feature.

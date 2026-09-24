@@ -248,7 +248,8 @@ fn inspect_client_cursor() {
         .assert()
         .success()
         .stdout(predicate::str::contains("\"type\": \"http\""))
-        .stdout(predicate::str::contains(".cursor/mcp.json"));
+        .stdout(predicate::str::contains(".cursor/mcp.json"))
+        .stdout(predicate::str::contains("mcp.fetchhive.com"));
 }
 
 #[test]

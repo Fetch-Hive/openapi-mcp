@@ -23,9 +23,10 @@ checks `MCP_GATEWAY_TOKEN`. The relay can answer `401` when the endpoint is
 in `token` mode and the request has no `Authorization` header, without
 reading the credential.
 
-The reclaim secret is 32 random bytes, returned once in `Welcome`. The relay
-stores SHA-256 of that secret and compares it in constant time. The
-plaintext is not written to disk or Redis.
+The reclaim secret is 32 random bytes, returned once in `Welcome` as
+base64url without padding. The relay stores the hex SHA-256 of those 32
+bytes (it decodes the base64url form first) and compares it in constant
+time. The plaintext is not written to disk or Redis.
 
 The relay is MCP-only. It forwards `POST`, `GET`, and `DELETE` on `/mcp`.
 It answers `/health` itself. It does not open TCP, SSH, or arbitrary HTTP
@@ -317,13 +318,57 @@ may ping as well.
 
 ## Reconnect and reclaim
 
-On disconnect the CLI reconnects with backoff and sends `Hello` with
+On disconnect the CLI reconnects and sends `Hello` with
 `reclaim: { slug, credential }` using the credential from `Welcome`. The
 relay hashes the credential, compares it in constant time to the stored
 digest, and resumes the slug when the lease is still held. A live socket
 for that slug is closed with `1012` (`CLOSE_SERVICE_RESTART`) and replaced.
 `reclaim_expired` means the grace period elapsed. `reclaim_invalid` means
 the digest did not match.
+
+The open-source client (`mcp-gateway-tunnel`) waits
+`HELLO_TIMEOUT_SECS + 5` (10 seconds) for `Welcome` or `Rejected`. The
+relay's own deadline for seeing `Hello` is `HELLO_TIMEOUT_SECS` (5 seconds).
+A connect failure, a timeout, or a message that is not `Welcome` or
+`Rejected` is treated as a failed dial.
+
+Retry delay when the session did not name one:
+
+| Attempt after the failure | Base delay |
+| --- | --- |
+| 0 | 1s |
+| 1 | 2s |
+| 2 | 4s |
+| 3 | 8s |
+| 4 | 16s |
+| 5 | 32s |
+| 6 and later | 60s |
+
+The base is multiplied by a uniform random factor in `[0.8, 1.2)`, with a
+floor of 50ms. `go_away` is different: the CLI finishes in-flight calls,
+then waits exactly `reconnect_after_secs` with no jitter, and reclaims.
+The 8 hour anonymous recycle sends `reconnect_after_secs: 0`.
+
+| `Rejected.code` | CLI |
+| --- | --- |
+| `reclaim_expired`, `reclaim_invalid` | Drop the secret. Next `Hello` is a fresh anonymous tunnel, so the slug changes. Then the backoff above. |
+| `rate_limited` | Wait `retry_after_secs`, or 1 second when the field is absent. The backoff counter resets to 0. |
+| `maintenance` | Wait 1 second and dial again. `retry_after_secs` is not used for this code. |
+| `unauthorized`, `plan_limit`, `version_unsupported`, `name_taken`, `name_invalid`, `name_reserved`, and any other code | Stop. The process exits. |
+
+`mcp-gateway` maps those terminal codes to exit status: `2` for
+`unauthorized` and `plan_limit`, `1` for `version_unsupported` and the
+`name_*` codes, `4` for every other terminal code. Ctrl-C closes the
+WebSocket with `1000` and the process exits `130`.
+
+When `Welcome.limits.max_inflight` calls are already running, the CLI
+answers that request itself with HTTP `429`, `Retry-After: 1`, and
+
+```json
+{"jsonrpc":"2.0","error":{"code":-32000,"message":"too many in-flight requests"},"id":null}
+```
+
+The local MCP server is not called.
 
 While the lease exists and no socket is attached, public requests receive
 `503` with `Retry-After: 10` and this body:
@@ -335,7 +380,32 @@ While the lease exists and no socket is attached, public requests receive
 ## Slug rules
 
 Anonymous slugs are 8 characters from `abcdefghjkmnpqrstuvwxyz23456789`
-(no `0`, `o`, `1`, `l`, `i`). They are never permanently reserved.
+(no `0`, `o`, `1`, `l`, `i`). Each character is chosen independently, so a
+slug can be all letters. They are never permanently reserved, and anonymous
+allocation does not consult `RESERVED_SLUGS`. `internal` is 8 letters in
+that alphabet, so it can be issued. `connect` is 7 characters, so it cannot.
+
+A relay must not give one live slug to two sessions. The production relay
+writes `mcp_tunnel:lease:<slug>` with Redis `SET key NX EX`. The value is
+the lease record, and the reclaim field in it is the hex SHA-256 of the
+32 raw bytes. If the
+key already exists, it draws again, up to 8 times, then sends `Rejected`
+with `code: maintenance`, `message: could not allocate a tunnel name`, and
+`retry_after_secs: 5`. The CLI still waits 1 second for `maintenance`, as
+in the table above.
+
+The public hostname is one label, lowercased, in front of the public
+suffix. `connect.<suffix>` is the WebSocket host. The apex
+(`mcp.fetchhive.com` on the hosted suffix) is not a tenant. A name with an
+extra dot (`a.b.mcp.fetchhive.com`) is not a tenant. `Host: AbCdEfGh.…` and
+`Host: abcdefgh.…` are the same lease.
+
+The production relay also caps new anonymous tunnels at 10 per hour per
+client IP (`MCP_TUNNEL_ANON_CREATE_PER_HOUR`). The counter is
+`mcp_tunnel:create:<sha256(ip)>:<unix_hour>`. Over the cap the relay sends
+`rate_limited` with `message: too many anonymous tunnels from this network`
+and `retry_after_secs: 3600`. A draw that fails after the counter
+increments returns that slot.
 
 Named slugs match `^[a-z0-9]([a-z0-9-]{1,46}[a-z0-9])$` (3 to 48
 characters), are not in the reserved list, and are not anonymous-shaped
@@ -353,7 +423,7 @@ Public HTTP mapping on the tenant host:
 | Condition | Status |
 | --- | --- |
 | Body is not a JSON-RPC 2.0 object or array | `400` |
-| `auth_mode` is `token` and `Authorization` is missing | `401` |
+| `auth_mode` is `token` and `Authorization` is missing | `401`, `WWW-Authenticate: Bearer`, body `{"jsonrpc":"2.0","error":{"code":-32000,"message":"missing authorization"},"id":null}`. No OAuth discovery URL. |
 | No lease for the slug | `404` |
 | Method is not `POST`, `GET`, or `DELETE` | `405` |
 | Body larger than `max_body_bytes` | `413` |
@@ -364,7 +434,9 @@ Public HTTP mapping on the tenant host:
 | `request_timeout_secs` elapsed | `504` |
 
 `/health` on a tenant host is `200` from the relay and is not forwarded.
-Any other path is `404`.
+The body is `{"slug":"<slug>","online":true}` while a socket is attached
+and `{"slug":"<slug>","online":false}` while the lease exists and the CLI
+is gone. Any other path is `404`.
 
 WebSocket close codes:
 
