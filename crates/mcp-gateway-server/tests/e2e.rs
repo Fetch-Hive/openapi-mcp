@@ -327,7 +327,11 @@ async fn initialize_list_and_call_against_echo() {
     )
     .await;
     let text = body_text(resp).await;
+    let body: Value = serde_json::from_str(&text).unwrap();
     assert!(text.contains("list_pets"), "{text}");
+    assert_eq!(body["result"]["ttlMs"], 0, "{body}");
+    assert_eq!(body["result"]["cacheScope"], "private", "{body}");
+    assert_eq!(body["result"]["resultType"], "complete", "{body}");
 
     let resp = oneshot(
         h,
@@ -423,7 +427,11 @@ async fn legacy_initialize_echoes_client_version_and_lists_tools() {
     let status = resp.status();
     let text = body_text(resp).await;
     assert_eq!(status, StatusCode::OK, "{text}");
+    let body: Value = serde_json::from_str(&text).unwrap();
     assert!(text.contains("list_pets"), "{text}");
+    assert_eq!(body["result"]["ttlMs"], 0, "{body}");
+    assert_eq!(body["result"]["cacheScope"], "private", "{body}");
+    assert!(body["result"].get("resultType").is_none(), "{body}");
 }
 
 #[test]

@@ -7,8 +7,8 @@ use mcp_gateway_proxy::{
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ErrorData as McpError,
-    Implementation, ListToolsResult, PaginatedRequestParams, ProtocolVersion, ServerCapabilities,
-    ServerInfo, Tool,
+    CacheScope, Implementation, ListToolsResult, PaginatedRequestParams, ProtocolVersion,
+    ServerCapabilities, ServerInfo, Tool,
 };
 use rmcp::service::RequestContext;
 use rmcp::RoleServer;
@@ -217,7 +217,9 @@ impl ServerHandler for GatewayHandler {
             .copied()
             .map(operation_to_tool)
             .collect();
-        let mut result = ListToolsResult::with_all_items(page);
+        let mut result = ListToolsResult::with_all_items(page)
+            .with_ttl_ms(0)
+            .with_cache_scope(CacheScope::Private);
         if end < ops.len() {
             result.next_cursor = Some(end.to_string());
         }

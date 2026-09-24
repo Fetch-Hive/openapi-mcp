@@ -193,13 +193,29 @@ claude mcp add --transport http petstore https://SLUG.mcp.fetchhive.com/mcp \
   --header "Authorization: Bearer $MCP_GATEWAY_TOKEN"
 ```
 
+Claude Code 2.1.281 connects when `tools/list` includes `ttlMs` `0` and
+`cacheScope` `private`. `claude mcp list` reports Connected, and a prompt
+that calls `logout_user` receives `User logged out`. That check used a local
+build of this tree through the production relay. Released `mcp-gateway`
+0.7.0 omits both fields, and Claude Code 2.1.281 then rejects `tools/list`
+(`ttlMs` must be a number; `cacheScope` must be `public` or `private`). A
+server added to a project `.mcp.json` stays unused until
+`.claude/settings.json` sets `enabledMcpjsonServers` or
+`enableAllProjectMcpServers`.
+
 Codex (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.petstore]
 url = "https://SLUG.mcp.fetchhive.com/mcp"
 bearer_token_env_var = "MCP_GATEWAY_TOKEN"
+default_tools_approval_mode = "approve"
 ```
+
+Codex 0.156.1 accepts `auto`, `prompt`, `writes`, or `approve` for
+`default_tools_approval_mode`. A non-interactive `codex exec` whose approval
+policy is `never` refuses the call with `MCP tool call requires approval, but
+approval policy is never` until that field is `approve`.
 
 VS Code (`.vscode/mcp.json`):
 
@@ -227,15 +243,29 @@ OpenAI Responses API (`require_approval` set so the call is not interactive):
 }
 ```
 
-Anthropic Messages API (`mcp_servers` entry; confirm the beta header name
-in Anthropic's current docs):
+Anthropic Messages API. Send header `anthropic-beta: mcp-client-2025-11-20`
+(the older `mcp-client-2025-04-04` header is deprecated). `authorization_token`
+is the raw bearer token. The tool allow-list lives on an `mcp_toolset` in
+`tools`, not on the server object:
 
 ```json
 {
-  "type": "url",
-  "url": "https://SLUG.mcp.fetchhive.com/mcp",
-  "name": "petstore",
-  "authorization_token": "$MCP_GATEWAY_TOKEN"
+  "mcp_servers": [
+    {
+      "type": "url",
+      "url": "https://SLUG.mcp.fetchhive.com/mcp",
+      "name": "petstore",
+      "authorization_token": "$MCP_GATEWAY_TOKEN"
+    }
+  ],
+  "tools": [
+    {
+      "type": "mcp_toolset",
+      "mcp_server_name": "petstore",
+      "default_config": { "enabled": false },
+      "configs": { "get_inventory": { "enabled": true } }
+    }
+  ]
 }
 ```
 
@@ -261,20 +291,23 @@ count, request id, and client IP. They do not store bodies, cookies, or
 Checked against production `wss://connect.mcp.fetchhive.com/v1/tunnel` with
 the Petstore spec (`https://petstore3.swagger.io/api/v3/openapi.json`).
 `tools/call` used `find_pets_by_status`. A 5xx from Petstore is the upstream
-API, not the tunnel.
+API, not the tunnel. The curl, OpenAI, Anthropic, Codex, and Inspector rows
+used released `mcp-gateway` 0.7.0. The Claude Code row used a local build of
+this tree on the same relay. Released 0.7.0 `tools/list` omits `ttlMs` and
+`cacheScope`.
 
 | Client | How | Headers | Result | Notes |
 |---|---|---|---|---|
-| curl | `initialize`, `tools/list`, `tools/call` `find_pets_by_status`, `GET /mcp` | yes | pass, 2026-09-24 | Byte-identical to loopback on production. `initialize` echoed `2025-11-25` (148 bytes). `tools/list` returned 18 tools (9647 bytes). `tools/call` returned Petstore JSON (409732 bytes). `GET /mcp` is 405. A POST with no `Authorization` is 401 and `WWW-Authenticate: Bearer`. CLI version string in that run was 0.6.0; the release tag for this client is 0.7.0. |
-| OpenAI Responses API | `tools: [{ type: "mcp", server_url, headers }]` | yes | not run | Confirm a `GET /mcp` probe (this server returns 405 for GET) falls back to POST. |
+| curl | `initialize`, `tools/list`, `tools/call` `find_pets_by_status`, `GET /mcp`, `DELETE /mcp` | yes | pass, 2026-09-24 | `mcp-gateway` 0.7.0, byte-identical to loopback. `initialize` echoed `2025-11-25` (148 bytes) and `serverInfo.version` `0.7.0`. `tools/list` returned 18 tools (9647 bytes). `tools/call` `find_pets_by_status` returned Petstore JSON (409732 bytes). Responses are `content-type: application/json`. `GET /mcp` is 405 with an empty body and no `Allow` header. `DELETE /mcp` is 405 with `Allow: POST,GET,HEAD`. A POST with no `Authorization` is 401, `WWW-Authenticate: Bearer`, and body `{"jsonrpc":"2.0","error":{"code":-32000,"message":"missing authorization"},"id":null}`. `GET /.well-known/oauth-protected-resource` is 404 with an empty body. |
+| OpenAI Responses API | `tools: [{ type: "mcp", server_url, headers }]` | yes | pass, 2026-09-24 | Model `gpt-6-astra`, `require_approval: "never"`, `headers.Authorization` set to `Bearer <token>`, `allowed_tools: ["get_inventory"]`. The API returned `mcp_list_tools` with that one tool, then `mcp_call` `get_inventory`. Petstore answered HTTP 500; the gateway returned that as MCP `isError` text. The connector completed the POST path. |
 | ChatGPT connectors | UI | OAuth-first | not supported | No OAuth on the tunnel in this release. `--tunnel-auth public` is the only unauthenticated option, with the warning above. |
-| Anthropic Messages API | `mcp_servers: [{ type: "url", authorization_token }]` | yes | not run | Confirm the beta header name at test time. |
-| Claude Code | `claude mcp add --transport http` | yes | not run | Snippet above. |
+| Anthropic Messages API | `mcp_servers` plus `tools: [{ type: "mcp_toolset" }]`, header `anthropic-beta: mcp-client-2025-11-20` | yes | pass, 2026-09-24 | Request model `claude-opus-5`. `authorization_token` is the raw token. The response contained `mcp_tool_use` `get_inventory` and `mcp_tool_result` with the same Petstore HTTP 500 text, then `stop_reason: end_turn`. |
+| Claude Code | `claude mcp add --transport http` | yes | pass, local build, 2026-09-24 | Claude Code 2.1.281 against a local build of this tree. `claude mcp list` reported Connected. A prompt called `logout_user` and the tool result was `User logged out`. That build's `tools/list` includes `ttlMs` `0` and `cacheScope` `private`. Released `mcp-gateway` 0.7.0 omits both fields, and Claude Code 2.1.281 rejects that `tools/list` (`ttlMs` must be a number; `cacheScope` must be `public` or `private`). A project `.mcp.json` server stays unused until `.claude/settings.json` sets `enabledMcpjsonServers` or `enableAllProjectMcpServers`; until then `claude mcp list` says `Pending approval`. |
 | Claude Desktop / claude.ai | UI | OAuth-first | not supported | Same caveat as ChatGPT. |
-| Cursor | `.cursor/mcp.json` | yes | not run | A 401 without a header may probe `/.well-known/oauth-protected-resource`. Send the bearer header. |
-| Codex | `bearer_token_env_var` | yes | not run | Snippet above. |
-| VS Code | `.vscode/mcp.json` `type: http` | yes | not run | Snippet above. |
-| MCP Inspector | `npx @modelcontextprotocol/inspector` | yes | not run | Exercises GET and DELETE. GET `/mcp` is 405; DELETE is forwarded. |
+| Cursor | `.cursor/mcp.json` | yes | not run | A 401 without a header may probe `/.well-known/oauth-protected-resource`. That path is a 404 with an empty body. Send the bearer header. |
+| Codex | `bearer_token_env_var` and `default_tools_approval_mode = "approve"` | yes | pass, 2026-09-24 | Codex CLI 0.156.1 called `logout_user` and received `User logged out`. |
+| VS Code | `.vscode/mcp.json` `type: http` | yes | not run | VS Code 1.136.0 is installed. `code chat` opens a window and does not return a tool result to the shell, so this row has no recorded call. |
+| MCP Inspector | `npx @modelcontextprotocol/inspector --cli` 2.8.0, `--transport http` | yes | pass, 2026-09-24 | `initialize` returned protocol `2025-11-25` and server `0.7.0`. `tools/list` returned 18 tools. `tools/call` `logout_user` returned `User logged out`. `get_inventory` is `isError` with `structuredContent.error_code` `"upstream_5xx"` while `outputSchema` says the values are integers; Inspector 2.8.0 then exits with `data/error_code must be integer`. `get_pet_by_id` returns the tool result and then exits `tool_is_error` because `isError` is true. |
 | ngrok or cloudflared in front of `serve` | generic TCP/HTTP tunnel | n/a | not a supported path | See below. |
 | Fetch Hive Studio | attach as a workspace MCP server | yes | not run | Paste the banner URL and the bearer. |
 
