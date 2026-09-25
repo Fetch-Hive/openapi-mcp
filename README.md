@@ -93,7 +93,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker (linux/amd64 and linux/arm64)
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.8.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.8.1 version
 
 # npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version

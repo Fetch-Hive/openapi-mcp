@@ -1,6 +1,6 @@
 {
   "name": "@fetch-hive/mcp-gateway",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Turn an OpenAPI document into an MCP server",
   "license": "Apache-2.0",
   "repository": {
@@ -20,11 +20,11 @@
     "arm64"
   ],
   "optionalDependencies": {
-    "@fetch-hive/mcp-gateway-linux-x64-musl": "0.8.0",
-    "@fetch-hive/mcp-gateway-linux-arm64-musl": "0.8.0",
-    "@fetch-hive/mcp-gateway-darwin-x64": "0.8.0",
-    "@fetch-hive/mcp-gateway-darwin-arm64": "0.8.0",
-    "@fetch-hive/mcp-gateway-win32-x64-msvc": "0.8.0"
+    "@fetch-hive/mcp-gateway-linux-x64-musl": "0.8.1",
+    "@fetch-hive/mcp-gateway-linux-arm64-musl": "0.8.1",
+    "@fetch-hive/mcp-gateway-darwin-x64": "0.8.1",
+    "@fetch-hive/mcp-gateway-darwin-arm64": "0.8.1",
+    "@fetch-hive/mcp-gateway-win32-x64-msvc": "0.8.1"
   },
   "publishConfig": {
     "access": "public"
