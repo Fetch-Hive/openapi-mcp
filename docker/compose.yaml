@@ -5,7 +5,7 @@
 # if `serve` cannot write config.
 services:
   mcp-gateway:
-    image: ghcr.io/fetch-hive/mcp-gateway:0.8.1
+    image: ghcr.io/fetch-hive/mcp-gateway:0.9.0
     read_only: true
     cap_drop:
       - ALL

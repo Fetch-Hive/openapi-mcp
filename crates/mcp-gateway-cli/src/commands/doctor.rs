@@ -31,6 +31,7 @@ pub async fn run(
         }
         Err(e) => {
             checks.push(fail("config parse", e.to_string()));
+            checks.push(fetchhive_login(paths));
             return finish(out, checks);
         }
     };
@@ -58,6 +59,7 @@ pub async fn run(
             "one or more env/file references are missing",
         )
     });
+    checks.push(fetchhive_login(paths));
 
     if let Some(spec_name) = name
         .as_deref()
@@ -246,6 +248,20 @@ pub async fn run(
     }
 
     finish(out, checks)
+}
+
+fn fetchhive_login(paths: &PlatformPaths) -> Check {
+    match crate::fetchhive::doctor_note(&paths.credentials_file) {
+        crate::fetchhive::DoctorNote::Missing => ok("fetchhive login", "not logged in"),
+        crate::fetchhive::DoctorNote::LoggedIn { email } => {
+            ok("fetchhive login", format!("logged in as {email}"))
+        }
+        crate::fetchhive::DoctorNote::Loose { email } => warn(
+            "fetchhive login",
+            format!("credentials.toml is group or world readable ({email})"),
+        ),
+        crate::fetchhive::DoctorNote::Unreadable(err) => warn("fetchhive login", err),
+    }
 }
 
 fn ok(name: &'static str, detail: impl Into<String>) -> Check {

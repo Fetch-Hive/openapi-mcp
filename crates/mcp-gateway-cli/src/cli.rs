@@ -169,6 +169,40 @@ pub enum Commands {
         #[arg(long)]
         offline: bool,
     },
+    /// Sign in to a Fetch Hive account. Optional. Anonymous tunnels do not require it.
+    Login {
+        /// Do not open a browser.
+        #[arg(long)]
+        no_browser: bool,
+        /// Fetch Hive API origin. Overrides $MCP_GATEWAY_API_URL.
+        #[arg(long)]
+        api_url: Option<String>,
+        /// Sign in again even when credentials.toml or $MCP_GATEWAY_CLI_TOKEN is already set.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Revoke the CLI token and delete credentials.toml.
+    Logout {
+        /// Delete credentials.toml without calling the API.
+        #[arg(long)]
+        keep_remote: bool,
+        /// Account token. Hidden. $MCP_GATEWAY_CLI_TOKEN is the usual CI path.
+        #[arg(long, hide = true)]
+        cli_token: Option<String>,
+        #[arg(long)]
+        api_url: Option<String>,
+    },
+    /// Show the signed-in Fetch Hive account.
+    Whoami {
+        /// Delete credentials.toml when the server says the token is revoked.
+        #[arg(long)]
+        clear: bool,
+        /// Account token. Hidden. $MCP_GATEWAY_CLI_TOKEN is the usual CI path.
+        #[arg(long, hide = true)]
+        cli_token: Option<String>,
+        #[arg(long)]
+        api_url: Option<String>,
+    },
     /// Call one tool through the same proxy path as serve.
     Test {
         name: String,
@@ -309,7 +343,7 @@ pub enum ClientKind {
 pub fn print_help_all() {
     println!(
         "mcp-gateway operator CLI plus hidden aliases.\n\n\
-Visible commands:\n  init, add-spec, list, inspect, auth, serve, tunnel, doctor, test, logs, version, upgrade\n\n\
+Visible commands:\n  init, add-spec, list, inspect, auth, serve, tunnel, login, logout, whoami, doctor, test, logs, version, upgrade\n\n\
 Hidden aliases (--help-all):\n  compile <SPEC> [--out ir.json] [--report report.json]\n  list-tools <ir.json> [--tag TAG]\n  call <ir.json> <tool_name> --args '<json>' [--base-url URL] [--bearer-env VAR] [--allow-disabled]\n  corpus [--only ID]\n"
     );
 }

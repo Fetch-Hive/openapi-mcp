@@ -13,7 +13,8 @@ Fetch Hive infrastructure. Point the CLI at another relay with
 `MCP_GATEWAY_RELAY_URL`. Frame types live in
 [Tunnel protocol](tunnel-protocol.md).
 
-This release is anonymous only. There is no `mcp-gateway login`, no
+Tunnels in this release are anonymous. `mcp-gateway login` stores an account
+token for a later release. `serve` and `tunnel` do not read it. There is no
 `tunnels` command, and `--name` exits with "persistent names are not
 available yet". `mcp-gateway tunnel` exposes a Streamable HTTP server or a
 stdio server you already run. `serve NAME --tunnel` is unchanged.

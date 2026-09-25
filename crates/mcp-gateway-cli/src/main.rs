@@ -3,6 +3,7 @@ mod clients;
 mod commands;
 mod config;
 mod exit;
+mod fetchhive;
 mod ir_cache;
 mod output;
 mod paths;
@@ -10,7 +11,7 @@ mod runtime;
 mod secrets;
 
 use clap::Parser;
-use cli::Cli;
+use cli::{Cli, Commands};
 use exit::ExitCode;
 use output::Output;
 
@@ -34,6 +35,12 @@ fn main() {
 }
 
 fn run(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
+    if matches!(
+        cli.command,
+        Commands::Login { .. } | Commands::Logout { .. } | Commands::Whoami { .. }
+    ) {
+        return commands::account(cli, out);
+    }
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

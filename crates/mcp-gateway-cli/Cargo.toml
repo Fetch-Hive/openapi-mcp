@@ -33,13 +33,14 @@ secrecy.workspace = true
 sha2.workspace = true
 hex.workspace = true
 rand.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["rustls-tls-native-roots"] }
 url.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 time.workspace = true
 terminal_size.workspace = true
 serde_yaml.workspace = true
+open = "5"
 
 [dev-dependencies]
 pretty_assertions = "1"

@@ -2,6 +2,8 @@ mod auth;
 mod doctor;
 mod hidden;
 mod init;
+mod login;
+mod logout;
 mod logs;
 mod serve;
 mod spec;
@@ -10,6 +12,7 @@ mod tunnel;
 mod tunnel_screen;
 mod upgrade;
 mod version;
+mod whoami;
 
 use crate::cli::{Cli, Commands};
 use crate::config::GatewayConfig;
@@ -17,6 +20,28 @@ use crate::exit::ExitCode;
 use crate::output::Output;
 use crate::paths::PlatformPaths;
 use crate::CliError;
+
+pub fn account(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
+    let paths = PlatformPaths::resolve(cli.globals.config.as_deref());
+    match cli.command {
+        Commands::Login {
+            no_browser,
+            api_url,
+            force,
+        } => login::run(&paths, &cli.globals, out, no_browser, api_url, force),
+        Commands::Logout {
+            keep_remote,
+            cli_token,
+            api_url,
+        } => logout::run(&paths, out, keep_remote, cli_token, api_url),
+        Commands::Whoami {
+            clear,
+            cli_token,
+            api_url,
+        } => whoami::run(&paths, out, clear, cli_token, api_url),
+        _ => Err(CliError::usage("internal: account command expected")),
+    }
+}
 
 pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
     let paths = PlatformPaths::resolve(cli.globals.config.as_deref());
@@ -120,6 +145,9 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
         Commands::Doctor { name, offline } => {
             doctor::run(&paths, &cli.globals, out, name, offline).await
         }
+        Commands::Login { .. } | Commands::Logout { .. } | Commands::Whoami { .. } => Err(
+            CliError::usage("internal: account commands run outside the async runtime"),
+        ),
         Commands::Test {
             name,
             tool,

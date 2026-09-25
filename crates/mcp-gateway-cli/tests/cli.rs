@@ -12,7 +12,9 @@ fn bin() -> Command {
     cmd.env_remove("MCP_GATEWAY_TEST_BASE_URL")
         .env_remove("MCP_GATEWAY_TEST_ALLOW_LOOPBACK")
         .env_remove("PORT")
-        .env_remove("MCP_GATEWAY_SPEC_URL");
+        .env_remove("MCP_GATEWAY_SPEC_URL")
+        .env_remove("MCP_GATEWAY_CLI_TOKEN")
+        .env_remove("MCP_GATEWAY_API_URL");
     cmd
 }
 
@@ -68,7 +70,9 @@ fn help_all_lists_hidden() {
         .success()
         .stdout(predicate::str::contains("compile <SPEC>"))
         .stdout(predicate::str::contains("list-tools"))
-        .stdout(predicate::str::contains("serve, tunnel, doctor"));
+        .stdout(predicate::str::contains(
+            "serve, tunnel, login, logout, whoami, doctor",
+        ));
 }
 
 #[test]
