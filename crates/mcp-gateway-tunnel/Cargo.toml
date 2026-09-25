@@ -7,6 +7,13 @@ description = "MCP Gateway tunnel client. Dials the relay and forwards /mcp to a
 repository.workspace = true
 homepage.workspace = true
 
+# The only binary in this crate is the stdio test double. The published
+# `mcp-gateway` binary lives in mcp-gateway-cli and already includes `tunnel`.
+# Leaving this package distable makes cargo-dist emit a second app that
+# overwrites Formula/mcp-gateway.rb with an installer for stdio_fixture.
+[package.metadata.dist]
+dist = false
+
 [[bin]]
 name = "stdio_fixture"
 path = "src/bin/stdio_fixture.rs"
