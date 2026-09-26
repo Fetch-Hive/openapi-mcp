@@ -24,6 +24,8 @@ fn cfg(addr: std::net::SocketAddr) -> TunnelConfig {
         mcp_path: MCP_PATH.into(),
         auth_mode: mcp_gateway_tunnel_proto::EndpointAuthMode::Token,
         client: client_identity(),
+        name: None,
+        bearer: None,
     }
 }
 
@@ -451,6 +453,46 @@ async fn goaway_reconnects_after_the_requested_delay() {
 }
 
 #[tokio::test]
+async fn replaced_go_away_does_not_reconnect() {
+    let connects = Arc::new(AtomicUsize::new(0));
+    let addr = listen({
+        let connects = connects.clone();
+        move |mut ws: WebSocket| {
+            let connects = connects.clone();
+            async move {
+                connects.fetch_add(1, Ordering::SeqCst);
+                let _ = recv_text(&mut ws).await;
+                send_json(&mut ws, &welcome()).await;
+                send_json(
+                    &mut ws,
+                    &Frame::GoAway {
+                        reason: "replaced by a newer connection".into(),
+                        reconnect_after_secs: 0,
+                    },
+                )
+                .await;
+            }
+        }
+    })
+    .await;
+    let mut cfg = cfg(addr);
+    cfg.name = Some("stripe-dev".into());
+    cfg.bearer = Some("fh_cli_namedfixture".into());
+    let mut handle = run(cfg, Router::new());
+    loop {
+        handle.state.changed().await.expect("replaced");
+        if let TunnelState::Rejected { code, message } = handle.state.borrow().clone() {
+            assert_eq!(code, "replaced");
+            assert_eq!(message, "replaced by a newer connection");
+            break;
+        }
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(connects.load(Ordering::SeqCst), 1);
+    handle.shutdown.cancel();
+}
+
+#[tokio::test]
 async fn terminal_reject_does_not_reconnect() {
     let connects = Arc::new(AtomicUsize::new(0));
     let addr = listen({
@@ -714,4 +756,157 @@ async fn http_upstream_through_the_relay_strips_the_gateway_token() {
     assert_eq!(proxied.path.lock().unwrap().as_str(), "/custom?x=1");
     assert!(proxied.auth.lock().unwrap().is_none());
     handle.shutdown.cancel();
+}
+
+fn named_welcome() -> Welcome {
+    Welcome::new(
+        "stripe-dev",
+        "https://stripe-dev.mcp.fetchhive.com/mcp",
+        "b".repeat(43),
+        0,
+        None,
+        Limits::anonymous_defaults(),
+        EndpointKind::Named {
+            endpoint_id: "ep-1".into(),
+        },
+    )
+}
+
+async fn listen_headers<F, Fut>(on_upgrade: F) -> std::net::SocketAddr
+where
+    F: Fn(axum::http::HeaderMap, WebSocket) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    let app = Router::new().route(
+        "/v1/tunnel",
+        get(
+            move |headers: axum::http::HeaderMap, ws: WebSocketUpgrade| {
+                let on_upgrade = on_upgrade.clone();
+                async move { ws.on_upgrade(move |socket| on_upgrade(headers, socket)) }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    addr
+}
+
+#[tokio::test]
+async fn named_hello_without_bearer_is_terminal() {
+    let connects = Arc::new(AtomicUsize::new(0));
+    let hellos = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let auths = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let addr = listen_headers({
+        let connects = connects.clone();
+        let hellos = hellos.clone();
+        let auths = auths.clone();
+        move |headers: axum::http::HeaderMap, mut ws: WebSocket| {
+            let connects = connects.clone();
+            let hellos = hellos.clone();
+            let auths = auths.clone();
+            async move {
+                connects.fetch_add(1, Ordering::SeqCst);
+                auths.lock().unwrap().push(
+                    headers
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or("")
+                        .to_owned(),
+                );
+                let hello = recv_text(&mut ws).await;
+                hellos.lock().unwrap().push(hello);
+                let rejected = mcp_gateway_tunnel_proto::Rejected::new(
+                    mcp_gateway_tunnel_proto::RejectCode::Unauthorized,
+                    "run mcp-gateway login",
+                    None,
+                );
+                send_json(&mut ws, &rejected).await;
+            }
+        }
+    })
+    .await;
+    let mut cfg = cfg(addr);
+    cfg.name = Some("stripe-dev".into());
+    let mut handle = run(cfg, Router::new());
+    let state = wait_state(&mut handle.state).await;
+    match state {
+        TunnelState::Rejected { code, .. } => assert_eq!(code, "unauthorized"),
+        other => panic!("{other:?}"),
+    }
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(connects.load(Ordering::SeqCst), 1);
+    assert_eq!(auths.lock().unwrap().as_slice(), &[""]);
+    let hello = &hellos.lock().unwrap()[0];
+    assert!(hello.contains("stripe-dev"), "{hello}");
+    assert!(hello.contains("named"), "{hello}");
+    handle.shutdown.cancel();
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn named_reconnect_keeps_the_same_slug() {
+    let hellos = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let auths = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let addr = listen_headers({
+        let hellos = hellos.clone();
+        let auths = auths.clone();
+        move |headers: axum::http::HeaderMap, mut ws: WebSocket| {
+            let hellos = hellos.clone();
+            let auths = auths.clone();
+            async move {
+                auths.lock().unwrap().push(
+                    headers
+                        .get("authorization")
+                        .and_then(|value| value.to_str().ok())
+                        .unwrap_or("")
+                        .to_owned(),
+                );
+                let hello = recv_text(&mut ws).await;
+                let n = {
+                    let mut saved = hellos.lock().unwrap();
+                    saved.push(hello);
+                    saved.len()
+                };
+                send_json(&mut ws, &named_welcome()).await;
+                if n == 1 {
+                    return;
+                }
+                std::future::pending::<()>().await;
+            }
+        }
+    })
+    .await;
+    let mut cfg = cfg(addr);
+    cfg.name = Some("stripe-dev".into());
+    cfg.bearer = Some("fh_cli_namedfixture".into());
+    let mut handle = run(cfg, Router::new());
+    loop {
+        if let TunnelState::Reconnecting { .. } = handle.state.borrow().clone() {
+            break;
+        }
+        handle.state.changed().await.expect("first session");
+    }
+    tokio::time::advance(Duration::from_secs(2)).await;
+    loop {
+        if hellos.lock().unwrap().len() >= 2 {
+            if let TunnelState::Connected { url, .. } = handle.state.borrow().clone() {
+                assert!(url.contains("stripe-dev"), "{url}");
+                break;
+            }
+        }
+        handle.state.changed().await.expect("second welcome");
+    }
+    let saved = hellos.lock().unwrap();
+    assert!(saved[0].contains("stripe-dev"), "{}", saved[0]);
+    assert!(!saved[0].contains("reclaim"), "{}", saved[0]);
+    assert!(saved[1].contains("stripe-dev"), "{}", saved[1]);
+    assert!(saved[1].contains("reclaim"), "{}", saved[1]);
+    handle.shutdown.cancel();
+    let saved_auths = auths.lock().unwrap();
+    assert!(saved_auths.len() >= 2, "{saved_auths:?}");
+    assert!(saved_auths
+        .iter()
+        .all(|value| value == "Bearer fh_cli_namedfixture"));
 }

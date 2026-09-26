@@ -96,8 +96,8 @@ pub enum Commands {
         /// Uses the HTTP transport; do not combine with --stdio.
         #[arg(long, conflicts_with = "stdio")]
         tunnel: bool,
-        /// Persistent name. Not available yet.
-        #[arg(long = "name", value_name = "SLUG", hide = true, requires = "tunnel")]
+        /// Persistent hostname. Requires `mcp-gateway login`. Implies --tunnel.
+        #[arg(long = "name", value_name = "SLUG", conflicts_with = "stdio")]
         tunnel_name: Option<String>,
         /// How remote MCP clients authenticate. `public` needs --allow-anonymous.
         #[arg(long, value_enum, default_value_t = TunnelAuth::Token, requires = "tunnel")]
@@ -153,8 +153,8 @@ pub enum Commands {
         /// Local listen address for --stdio. Default 127.0.0.1:8787.
         #[arg(long, value_name = "ADDR", conflicts_with = "url")]
         bind: Option<String>,
-        /// Persistent name. Not available yet.
-        #[arg(long = "name", value_name = "SLUG", hide = true)]
+        /// Persistent hostname. Requires `mcp-gateway login`.
+        #[arg(long = "name", value_name = "SLUG")]
         name: Option<String>,
         /// Skip the initialize and tools/list probe.
         #[arg(long)]
@@ -192,6 +192,9 @@ pub enum Commands {
         #[arg(long)]
         api_url: Option<String>,
     },
+    /// List, reserve, and release persistent tunnel names.
+    #[command(subcommand)]
+    Tunnels(TunnelsCmd),
     /// Show the signed-in Fetch Hive account.
     Whoami {
         /// Delete credentials.toml when the server says the token is revoked.
@@ -272,6 +275,21 @@ pub enum Commands {
 }
 
 #[derive(Debug, Clone, Subcommand)]
+pub enum TunnelsCmd {
+    /// Show reserved names and whether each one is online.
+    List,
+    /// Reserve a name without opening a tunnel.
+    Create { name: String },
+    /// Release a name. A live tunnel using it disconnects.
+    Delete {
+        name: String,
+        /// Skip the confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Clone, Subcommand)]
 pub enum AuthCmd {
     Add {
         name: String,
@@ -343,7 +361,7 @@ pub enum ClientKind {
 pub fn print_help_all() {
     println!(
         "mcp-gateway operator CLI plus hidden aliases.\n\n\
-Visible commands:\n  init, add-spec, list, inspect, auth, serve, tunnel, login, logout, whoami, doctor, test, logs, version, upgrade\n\n\
+Visible commands:\n  init, add-spec, list, inspect, auth, serve, tunnel, tunnels, login, logout, whoami, doctor, test, logs, version, upgrade\n\n\
 Hidden aliases (--help-all):\n  compile <SPEC> [--out ir.json] [--report report.json]\n  list-tools <ir.json> [--tag TAG]\n  call <ir.json> <tool_name> --args '<json>' [--base-url URL] [--bearer-env VAR] [--allow-disabled]\n  corpus [--only ID]\n"
     );
 }

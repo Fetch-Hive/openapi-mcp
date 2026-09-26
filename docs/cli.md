@@ -54,10 +54,9 @@ Exit codes: `0` ok, `1` usage/config, `2` policy/SSRF/doctor-fail,
 
 ## Account
 
-Login is optional. It writes an account token for a later persistent-name
-release. `serve` and `tunnel` ignore `credentials.toml`. `doctor` reads the
-file only to check its mode and the stored email. `--name` still exits 1
-with `persistent names are not available yet`. Anonymous tunnels do not
+Login is optional for an anonymous tunnel. It writes an account token that
+`serve --name`, `tunnel --name`, and `tunnels` read. `doctor` reads the
+file only to check its mode and the stored email. Anonymous tunnels do not
 require an account.
 
 ```text
@@ -124,7 +123,10 @@ logged_in_at = "2026-09-26T00:00:00Z"
 `account_name` is omitted when the API sends null.
 
 Token lookup for `whoami` and `logout` is `--cli-token` (hidden), then
-`MCP_GATEWAY_CLI_TOKEN`, then `credentials.toml`. The env var and the flag
+`MCP_GATEWAY_CLI_TOKEN`, then `credentials.toml`. `tunnels`, `serve --name`,
+and `tunnel --name` use the env var and then the file. They have no
+`--cli-token` flag. A 401 from those commands leaves `credentials.toml` in
+place. The env var and the flag
 override the file. `logout` does not delete the file and does not call
 `DELETE /v1/cli/token` when the token came from the env var or `--cli-token`.
 Unset the variable first. A file token calls `DELETE /v1/cli/token` and then
@@ -166,8 +168,8 @@ an outbound WebSocket to `wss://connect.mcp.fetchhive.com/v1/tunnel` (override
 with `MCP_GATEWAY_RELAY_URL` or `[tunnel] relay_url` in config). The status
 screen prints `https://<slug>.mcp.fetchhive.com/mcp`. That URL is anonymous
 and is released 30 minutes after the CLI disconnects. `--tunnel` cannot be
-combined with `--stdio`. `--name` is hidden and exits with "persistent names
-are not available yet".
+combined with `--stdio`. `--name SLUG` implies `--tunnel` and reserves that
+hostname. See [Persistent names](tunnel.md#persistent-names).
 
 `--tunnel-auth token` (the default) requires `MCP_GATEWAY_TOKEN` or
 `--token-file`. Remote clients must send that bearer token.
@@ -184,7 +186,8 @@ and does not draw the screen. Ctrl-C exits 130 after the WebSocket closes.
 config is the fallback. The default is
 `wss://connect.mcp.fetchhive.com/v1/tunnel`. An empty token in token mode
 exits 1 and names `MCP_GATEWAY_TOKEN`, `--token-file`, or
-`--tunnel-auth public`. `--name` exits 1 before any socket opens.
+`--tunnel-auth public`. `--name` with no account token exits 1 before any
+socket opens. The sentence is in [Persistent names](tunnel.md#persistent-names).
 
 A terminal `Rejected` exits 2 for `unauthorized` and `plan_limit`, 1 for
 `version_unsupported` and `name_taken` / `name_invalid` / `name_reserved`,
@@ -211,7 +214,8 @@ mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tm
 
 A URL and `--stdio` together exit 1. Neither argument exits 1. `--bind` with
 a URL exits 1. The stdio default bind is `127.0.0.1:8787` and the path is
-`/mcp`. `--name` exits 1 with "persistent names are not available yet".
+`/mcp`. `--name SLUG` reserves that hostname. See
+[Persistent names](tunnel.md#persistent-names).
 
 Loopback, RFC1918, and IPv6 ULA are allowed on any port.
 `--allow-remote-upstream` is required for a public address (exit 1 without

@@ -36,9 +36,10 @@ pub async fn run(
     no_probe: bool,
     allow_remote_upstream: bool,
 ) -> Result<ExitCode, CliError> {
-    if name.is_some() {
-        return Err(CliError::usage("persistent names are not available yet"));
-    }
+    let named = match name.as_deref() {
+        Some(slug) => Some(crate::commands::named::prepare(paths, slug).await?),
+        None => None,
+    };
     let mode = match tunnel_auth {
         CliAuth::Token => ProxyAuth::Token,
         CliAuth::Passthrough => ProxyAuth::Passthrough,
@@ -83,6 +84,7 @@ pub async fn run(
                 gate,
                 None,
                 None,
+                named.as_ref(),
             )
             .await
         }
@@ -123,6 +125,7 @@ pub async fn run(
                 gate,
                 Some(listener),
                 Some(fatal),
+                named.as_ref(),
             )
             .await
         }
@@ -167,6 +170,7 @@ async fn drive<S: LocalService>(
     service: S,
     listener: Option<TcpListener>,
     mut fatal: Option<watch::Receiver<Option<String>>>,
+    named: Option<&crate::commands::named::NamedSession>,
 ) -> Result<ExitCode, CliError> {
     if mode == ProxyAuth::Public && (out.json || out.quiet) {
         eprintln!("warning: this tunnel URL is reachable by anyone on the internet with no token");
@@ -192,6 +196,8 @@ async fn drive<S: LocalService>(
             ProxyAuth::Passthrough | ProxyAuth::Public => EndpointAuthMode::Public,
         },
         client: client_identity(),
+        name: named.map(|session| session.slug.clone()),
+        bearer: named.map(|session| session.token.clone()),
     };
     if out.json {
         print_event(&serde_json::json!({"event":"tunnel","state":"connecting"}));
@@ -221,6 +227,10 @@ async fn drive<S: LocalService>(
         extras,
         &stats,
     );
+    if let Some(session) = named {
+        screen = screen.persistent(&session.label);
+    }
+    let mut reserved_announced = false;
     let mut interrupted = false;
     let mut requests_open = true;
     loop {
@@ -253,6 +263,12 @@ async fn drive<S: LocalService>(
                 let snapshot = state.borrow().clone();
                 emit_tunnel(out, &snapshot);
                 screen.apply_state(&snapshot, &stats);
+                if let (Some(session), TunnelState::Connected { .. }) = (named, &snapshot) {
+                    if session.created && !reserved_announced {
+                        reserved_announced = true;
+                        crate::commands::named::announce_reserved(out, session);
+                    }
+                }
                 if let TunnelState::Rejected { code, message } = snapshot {
                     shutdown.cancel();
                     screen.finish();

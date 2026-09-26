@@ -6,9 +6,9 @@ relay hosts the production endpoints below. The same crate is enough to run
 a self-hosted relay; this repository does not ship one.
 
 The open-source CLI speaks this protocol. It does not send telemetry.
-Anonymous tunnels need no Fetch Hive account. Login, named hostnames, and
-the account database are hosted features and are not required to implement
-version 1.
+Anonymous tunnels need no Fetch Hive account. Named hostnames are optional.
+A relay can implement version 1 with anonymous mode only. `mode: named`
+then returns `unauthorized`.
 
 ## Overview and threat model
 
@@ -35,7 +35,7 @@ paths.
 What is open source: this document, the frame types, slug rules, and the
 CLI that dials the relay. What is Fetch Hive hosted: the production relay
 at `connect.mcp.fetchhive.com`, the `*.mcp.fetchhive.com` certificates, and
-(later) named-endpoint ownership. Point the CLI at another relay with
+named-endpoint ownership when the CLI sends an account token. Point the CLI at another relay with
 `MCP_GATEWAY_RELAY_URL`.
 
 ## Endpoints
@@ -118,8 +118,32 @@ ones. `lease_grace_secs` is how long the slug survives a disconnect.
 }
 ```
 
-The relay must see `Hello` within `HELLO_TIMEOUT_SECS`. `mode: named` on a
-relay that has no account authorizer returns `unauthorized`.
+The relay must see `Hello` within `HELLO_TIMEOUT_SECS`. For `mode: named`
+the CLI sets `Authorization: Bearer` on the WebSocket upgrade to the raw
+`fh_cli_` token. That header is not sent on later frames. The CLI does not
+hash the token and does not print it. A hosted relay computes the SHA-256
+hex digest of the token string (the `fh_cli_` characters, not a decoded
+payload) before it asks the control plane. Missing bearer, or a relay with
+no account authorizer, returns `unauthorized` and close `4001`. The CLI
+treats that as terminal and does not dial again.
+
+Named `Welcome` omits `max_session_secs` and sets `lease_grace_secs` to 0.
+The name stays reserved with no grace expiry. While the lease exists and
+the socket is down, public `/mcp` is `503`. A newer connection for the same
+name closes the older socket with `1012` and `go_away` reason
+`replaced by a newer connection`. The CLI treats that reason as terminal
+and does not dial again. `endpoint deleted` is terminal the same way.
+Anonymous `go_away` reasons, including `replaced by reclaim` and
+`session limit`, still reconnect.
+
+Delete writes `mcp_tunnel:deleted:<slug>` for 60 seconds and deletes the
+lease. A hello during that window still calls the control plane, and it
+does not use the grant cache. `created: true` (the authorize call just
+reserved the name) is terminal `unauthorized` with message
+`endpoint was deleted; run tunnels list`, and the tombstone stays.
+`created: false` (the name was already reserved, which is what the CLI
+POST does before it dials) deletes the tombstone and continues. After 60
+seconds the key expires on its own.
 
 ## Frames
 
@@ -444,7 +468,7 @@ WebSocket close codes:
 | --- | --- |
 | `1000` | Normal close |
 | `1008` | Policy rejection (`version_unsupported`, `name_taken`, `name_invalid`, `name_reserved`, `plan_limit`, `reclaim_expired`) |
-| `1012` | This socket was replaced by a reclaim |
+| `1012` | This socket was replaced by a reclaim, or by a newer named connection |
 | `1013` | `go_away`, or `Rejected` with `maintenance` |
 | `4001` | `unauthorized` or `reclaim_invalid` |
 | `4029` | `rate_limited` |

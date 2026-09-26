@@ -35,9 +35,14 @@ pub async fn run(
     base_url: Option<String>,
     url: Option<String>,
 ) -> Result<ExitCode, CliError> {
-    if tunnel_name.is_some() {
-        return Err(CliError::usage("persistent names are not available yet"));
+    if stdio && tunnel_name.is_some() {
+        return Err(CliError::usage("--name cannot be combined with --stdio"));
     }
+    let named = match tunnel_name.as_deref() {
+        Some(slug) => Some(crate::commands::named::prepare(paths, slug).await?),
+        None => None,
+    };
+    let tunnel = tunnel || named.is_some();
     bootstrap_spec(
         paths,
         globals,
@@ -195,7 +200,7 @@ pub async fn run(
     tunnel_opts.extra_allowed_hosts = vec![authority.clone()];
     let tunnel_app =
         build_router(handler, &tunnel_opts).map_err(|e| CliError::usage(e.to_string()))?;
-    let Some(tunnel_cfg) = prepare_tunnel(
+    let Some(mut tunnel_cfg) = prepare_tunnel(
         true,
         &mcp_gateway_tunnel::resolve_relay_url(&cfg.tunnel.relay_url),
         &authority,
@@ -204,6 +209,10 @@ pub async fn run(
     ) else {
         return Err(CliError::usage("tunnel did not start"));
     };
+    if let Some(session) = &named {
+        tunnel_cfg.name = Some(session.slug.clone());
+        tunnel_cfg.bearer = Some(session.token.clone());
+    }
     if out.json {
         print_event(&serde_json::json!({"event":"tunnel","state":"connecting"}));
     }
@@ -233,6 +242,10 @@ pub async fn run(
         &[],
         &stats,
     );
+    if let Some(session) = &named {
+        screen = screen.persistent(&session.label);
+    }
+    let mut reserved_announced = false;
     if allow_private && !out.json && !out.quiet {
         eprintln!(
             "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback."
@@ -254,6 +267,12 @@ pub async fn run(
                 let snapshot = state.borrow().clone();
                 emit_tunnel(out, &snapshot);
                 screen.apply_state(&snapshot, &stats);
+                if let (Some(session), TunnelState::Connected { .. }) = (&named, &snapshot) {
+                    if session.created && !reserved_announced {
+                        reserved_announced = true;
+                        crate::commands::named::announce_reserved(out, session);
+                    }
+                }
                 if let TunnelState::Rejected { code, message } = snapshot {
                     shutdown.cancel();
                     screen.finish();
@@ -349,9 +368,12 @@ pub(crate) fn reject_cli(code: &str, message: &str) -> CliError {
     let text = format!("tunnel rejected ({code}): {message}");
     match code {
         "unauthorized" | "plan_limit" => CliError::policy(text),
-        "version_unsupported" | "name_taken" | "name_invalid" | "name_reserved" => {
-            CliError::usage(text)
-        }
+        "version_unsupported"
+        | "name_taken"
+        | "name_invalid"
+        | "name_reserved"
+        | "replaced"
+        | "deleted" => CliError::usage(text),
         _ => CliError::upstream(text),
     }
 }
@@ -376,6 +398,8 @@ pub(crate) fn prepare_tunnel(
             TunnelAuth::Public => EndpointAuthMode::Public,
         },
         client: mcp_gateway_tunnel::client_identity(),
+        name: None,
+        bearer: None,
     })
 }
 

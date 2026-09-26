@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **security@fetchhive.com**. Do not open a public GitHub issue for
+Email **tom@fetchhive.com**. Do not open a public GitHub issue for
 security reports.
 
 We aim to acknowledge reports within 5 business days and to ship a fix or

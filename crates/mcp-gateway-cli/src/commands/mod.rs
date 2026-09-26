@@ -5,11 +5,13 @@ mod init;
 mod login;
 mod logout;
 mod logs;
+mod named;
 mod serve;
 mod spec;
 mod test_cmd;
 mod tunnel;
 mod tunnel_screen;
+mod tunnels;
 mod upgrade;
 mod version;
 mod whoami;
@@ -39,6 +41,7 @@ pub fn account(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
             cli_token,
             api_url,
         } => whoami::run(&paths, out, clear, cli_token, api_url),
+        Commands::Tunnels(cmd) => tunnels::run(&paths, out, cmd),
         _ => Err(CliError::usage("internal: account command expected")),
     }
 }
@@ -145,9 +148,12 @@ pub async fn dispatch(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
         Commands::Doctor { name, offline } => {
             doctor::run(&paths, &cli.globals, out, name, offline).await
         }
-        Commands::Login { .. } | Commands::Logout { .. } | Commands::Whoami { .. } => Err(
-            CliError::usage("internal: account commands run outside the async runtime"),
-        ),
+        Commands::Login { .. }
+        | Commands::Logout { .. }
+        | Commands::Whoami { .. }
+        | Commands::Tunnels(_) => Err(CliError::usage(
+            "internal: account commands run outside the async runtime",
+        )),
         Commands::Test {
             name,
             tool,

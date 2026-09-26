@@ -208,7 +208,7 @@ fn emit_logged_in(out: &Output, logged_in: &LoggedIn<'_>) {
     }
     let _ = writeln!(
         io::stdout(),
-        "✓ Logged in to Fetch Hive as {email}\n  Account: {account}  ·  tunnel endpoints: {endpoints}\n  Credentials: {credentials}\n\nNext: persistent tunnel names are not in this release. Anonymous tunnels do not need login.",
+        "✓ Logged in to Fetch Hive as {email}\n  Account: {account}  ·  tunnel endpoints: {endpoints}\n  Credentials: {credentials}\n\nNext: `mcp-gateway serve NAME --tunnel --name SLUG` keeps that hostname. Anonymous tunnels still need no account.",
         email = logged_in.email,
         account = logged_in.account,
         endpoints = logged_in.endpoints,

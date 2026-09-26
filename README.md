@@ -70,11 +70,13 @@ mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tm
 
 Details: [Tunnel](docs/tunnel.md).
 
-`mcp-gateway login` is optional. It stores an `fh_cli_` account token in
-`credentials.toml` next to `config.toml` (mode `0600` on Unix). `serve` and
-`tunnel` do not read that file. `doctor` reads it only to report the file
-mode and the email. Persistent tunnel names are not available yet.
-Anonymous tunnels do not require login. See [Account](docs/cli.md#account).
+`mcp-gateway login` is optional for an anonymous URL. It stores an `fh_cli_`
+account token in `credentials.toml` next to `config.toml` (mode `0600` on
+Unix). `serve --name` and `tunnel --name` read that token and keep
+`https://<name>.mcp.fetchhive.com/mcp` while the process is offline.
+`doctor` reads the file only to report the file mode and the email.
+Anonymous tunnels do not require login. See [Account](docs/cli.md#account)
+and [Persistent names](docs/tunnel.md#persistent-names).
 
 ## Deploy
 
@@ -99,7 +101,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker (linux/amd64 and linux/arm64)
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.9.0 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.10.0 version
 
 # npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version
@@ -119,7 +121,7 @@ references. Outbound HTTP uses an SSRF-hardened dialer.
 
 Default bind is loopback. Binding `0.0.0.0` requires `--expose`. Upstream
 private networks and localhost require `--allow-private-networks`. Report
-vulnerabilities to security@fetchhive.com — see `SECURITY.md`.
+vulnerabilities to tom@fetchhive.com — see `SECURITY.md`.
 
 ## Docs
 

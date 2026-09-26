@@ -37,7 +37,10 @@ fn main() {
 fn run(cli: Cli, out: &Output) -> Result<ExitCode, CliError> {
     if matches!(
         cli.command,
-        Commands::Login { .. } | Commands::Logout { .. } | Commands::Whoami { .. }
+        Commands::Login { .. }
+            | Commands::Logout { .. }
+            | Commands::Whoami { .. }
+            | Commands::Tunnels(_)
     ) {
         return commands::account(cli, out);
     }

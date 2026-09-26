@@ -48,7 +48,7 @@ pub fn client_identity() -> String {
     )
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TunnelConfig {
     pub relay_url: String,
     /// `Host` sent to the local server, including the port (`127.0.0.1:8787`).
@@ -57,6 +57,25 @@ pub struct TunnelConfig {
     pub mcp_path: String,
     pub auth_mode: EndpointAuthMode,
     pub client: String,
+    /// Persistent slug. Absent means an anonymous tunnel.
+    pub name: Option<String>,
+    /// Fetch Hive CLI token sent on the WebSocket upgrade. Not the MCP bearer.
+    pub bearer: Option<String>,
+}
+
+impl std::fmt::Debug for TunnelConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TunnelConfig")
+            .field("relay_url", &self.relay_url)
+            .field("local_authority", &self.local_authority)
+            .field("mcp_path", &self.mcp_path)
+            .field("auth_mode", &self.auth_mode)
+            .field("client", &self.client)
+            .field("name", &self.name)
+            .field("bearer", &self.bearer.as_ref().map(|_| "set"))
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

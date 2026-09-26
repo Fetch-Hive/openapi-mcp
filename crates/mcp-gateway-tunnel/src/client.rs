@@ -1,11 +1,13 @@
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
+use http::header::AUTHORIZATION;
 use mcp_gateway_tunnel_proto::{
     Hello, Reclaim, RejectCode, RelayHandshake, TunnelMode, Welcome, HELLO_TIMEOUT_SECS,
     MAX_WS_MESSAGE_BYTES,
 };
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{
     connect_async_with_config,
     tungstenite::{protocol::WebSocketConfig, Message},
@@ -39,13 +41,31 @@ pub(crate) async fn connect(cfg: &TunnelConfig, reclaim: Option<&Reclaim>) -> Ha
     let mut ws = WebSocketConfig::default();
     ws.max_message_size = Some(MAX_WS_MESSAGE_BYTES);
     ws.max_frame_size = Some(MAX_WS_MESSAGE_BYTES);
-    let connected = connect_async_with_config(&cfg.relay_url, Some(ws), true).await;
+    let Ok(mut request) = cfg.relay_url.clone().into_client_request() else {
+        return Handshake::Failed;
+    };
+    if let Some(token) = cfg
+        .bearer
+        .as_deref()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        let Ok(value) = format!("Bearer {token}").parse() else {
+            return Handshake::Failed;
+        };
+        request.headers_mut().insert(AUTHORIZATION, value);
+    }
+    let connected = connect_async_with_config(request, Some(ws), true).await;
     let Ok((mut socket, _)) = connected else {
         return Handshake::Failed;
     };
+    let mode = match &cfg.name {
+        Some(name) => TunnelMode::Named { name: name.clone() },
+        None => TunnelMode::Anonymous,
+    };
     let hello = Hello::new(
         cfg.client.clone(),
-        TunnelMode::Anonymous,
+        mode,
         cfg.auth_mode,
         reclaim.cloned(),
         cfg.mcp_path.clone(),

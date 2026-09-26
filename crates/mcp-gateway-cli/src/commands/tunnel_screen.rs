@@ -16,6 +16,7 @@ use crate::output::Output;
 pub const HEADER_ROWS: u16 = 8;
 const LABEL_WIDTH: usize = 16;
 const LEASE: &str = "anonymous, released 30 minutes after disconnect";
+const PERSISTENT_LEASE: &str = "persistent, stays reserved while offline";
 
 pub struct HeaderView {
     pub status: String,
@@ -23,6 +24,7 @@ pub struct HeaderView {
     pub local_url: String,
     pub remote_url: String,
     pub auth: String,
+    pub lease: String,
     pub inflight: u32,
     pub total: u64,
     pub reconnects: u64,
@@ -40,7 +42,9 @@ pub struct TunnelScreen {
     version: String,
     local_url: String,
     remote_url: String,
+    remote_note: String,
     auth: String,
+    lease: String,
     extras: Vec<(String, String)>,
     status: String,
 }
@@ -67,7 +71,9 @@ impl TunnelScreen {
             version: version.to_owned(),
             local_url: local_url.to_owned(),
             remote_url: "waiting".to_owned(),
+            remote_note: String::new(),
             auth,
+            lease: LEASE.to_owned(),
             extras,
             status: status_text(&TunnelState::Connecting),
         };
@@ -91,9 +97,15 @@ impl TunnelScreen {
         screen
     }
 
+    pub fn persistent(mut self, label: &str) -> Self {
+        self.lease = PERSISTENT_LEASE.to_owned();
+        self.remote_note = format!("  (persistent — {label})");
+        self
+    }
+
     pub fn apply_state(&mut self, state: &TunnelState, stats: &Stats) {
         if let TunnelState::Connected { url, .. } = state {
-            self.remote_url = url.clone();
+            self.remote_url = format!("{url}{}", self.remote_note);
         }
         self.status = status_text(state);
         if self.mode == Mode::Off {
@@ -136,7 +148,7 @@ impl TunnelScreen {
     }
 
     fn widest(&self) -> usize {
-        let mut width = LABEL_WIDTH + self.auth.chars().count().max(LEASE.chars().count());
+        let mut width = LABEL_WIDTH + self.auth.chars().count().max(self.lease.chars().count());
         for (label, value) in &self.extras {
             width = width.max(row(label, value).chars().count());
         }
@@ -199,6 +211,7 @@ impl TunnelScreen {
                 local_url: self.local_url.clone(),
                 remote_url: self.remote_url.clone(),
                 auth: self.auth.clone(),
+                lease: self.lease.clone(),
                 inflight: stats.inflight.load(Ordering::SeqCst),
                 total: stats.total.load(Ordering::SeqCst),
                 reconnects: stats.reconnects.load(Ordering::SeqCst),
@@ -226,7 +239,7 @@ pub fn header_lines(view: &HeaderView) -> [String; HEADER_ROWS as usize] {
         row("Local URL", &view.local_url),
         row("Remote URL", &view.remote_url),
         row("Auth", &view.auth),
-        row("Lease", LEASE),
+        row("Lease", &view.lease),
         String::new(),
         row(
             "Requests",
@@ -305,6 +318,7 @@ mod tests {
             local_url: "http://127.0.0.1:8787/mcp".to_owned(),
             remote_url: "https://abcd2345.mcp.fetchhive.com/mcp".to_owned(),
             auth: auth_value(false).to_owned(),
+            lease: LEASE.to_owned(),
             inflight: 1,
             total: 4,
             reconnects: 2,
@@ -333,6 +347,14 @@ mod tests {
         );
         assert!(lines[0].starts_with("Session status"));
         assert!(lines[7].starts_with("Requests"));
+    }
+
+    #[test]
+    fn persistent_lease_stays_reserved_while_offline() {
+        let mut view = sample();
+        view.lease = PERSISTENT_LEASE.to_owned();
+        let lines = header_lines(&view);
+        assert_eq!(&lines[5][LABEL_WIDTH..], PERSISTENT_LEASE);
     }
 
     #[test]

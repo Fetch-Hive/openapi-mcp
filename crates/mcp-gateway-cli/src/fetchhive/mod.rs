@@ -1,6 +1,7 @@
 pub(crate) mod credentials;
 pub(crate) mod device;
 pub(crate) mod me;
+pub(crate) mod tunnels;
 
 pub use credentials::{doctor_note, DoctorNote};
 pub use me::{revoke, whoami, Me, Revoke};

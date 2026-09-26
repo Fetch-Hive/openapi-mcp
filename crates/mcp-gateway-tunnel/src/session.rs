@@ -67,10 +67,14 @@ pub(crate) async fn run<S: LocalService>(
     let mut bodies: HashMap<u64, mpsc::UnboundedSender<Bytes>> = HashMap::new();
     let mut cancels: HashMap<u64, CancellationToken> = HashMap::new();
     let mut go_away: Option<u32> = None;
+    let mut terminal_reason: Option<String> = None;
 
     loop {
         if let Some(after) = go_away {
             if stats.inflight.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                if let Some(reason) = terminal_reason.take() {
+                    return stop_terminal(reason);
+                }
                 return stop_reconnect(
                     reclaim,
                     Some(std::time::Duration::from_secs(u64::from(after))),
@@ -125,8 +129,13 @@ pub(crate) async fn run<S: LocalService>(
                             Frame::Ping { nonce } => {
                                 let _ = out_tx.try_send(Out::Text(frame_json(&Frame::Pong { nonce })));
                             }
-                            Frame::GoAway { reconnect_after_secs, .. } => {
-                                go_away = Some(reconnect_after_secs);
+                            Frame::GoAway { reason, reconnect_after_secs } => {
+                                if terminal_go_away(&reason) {
+                                    terminal_reason = Some(reason);
+                                    go_away = Some(0);
+                                } else {
+                                    go_away = Some(reconnect_after_secs);
+                                }
                             }
                             Frame::Pong { .. } | Frame::ResponseStart { .. } | Frame::ResponseBody { .. } | Frame::Stats { .. } => {}
                         }
@@ -135,6 +144,9 @@ pub(crate) async fn run<S: LocalService>(
                         let _ = out_tx.try_send(Out::Pong(payload.to_vec()));
                     }
                     Some(Ok(Message::Close(_))) | Some(Err(_)) | None => {
+                        if let Some(reason) = terminal_reason.take() {
+                            return stop_terminal(reason);
+                        }
                         return stop_reconnect(reclaim, None);
                     }
                     Some(Ok(_)) => {}
@@ -145,6 +157,32 @@ pub(crate) async fn run<S: LocalService>(
                 bodies.remove(&id);
             }
         }
+    }
+}
+
+/// Named replace and delete must not dial again. A reclaim of the stale
+/// credential falls through to authorize and would take the name back.
+fn terminal_go_away(reason: &str) -> bool {
+    matches!(
+        reason,
+        "replaced by a newer connection" | "endpoint deleted"
+    )
+}
+
+fn stop_terminal(reason: String) -> SessionStop {
+    let (code, message) = match reason.as_str() {
+        "endpoint deleted" => (
+            "deleted",
+            "endpoint was deleted; run tunnels list".to_owned(),
+        ),
+        _ => ("replaced", reason),
+    };
+    SessionStop {
+        after: None,
+        reclaim: None,
+        fresh: false,
+        terminal: Some((code.to_owned(), message)),
+        shutdown: false,
     }
 }
 

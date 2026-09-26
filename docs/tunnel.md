@@ -13,11 +13,10 @@ Fetch Hive infrastructure. Point the CLI at another relay with
 `MCP_GATEWAY_RELAY_URL`. Frame types live in
 [Tunnel protocol](tunnel-protocol.md).
 
-Tunnels in this release are anonymous. `mcp-gateway login` stores an account
-token for a later release. `serve` and `tunnel` do not read it. There is no
-`tunnels` command, and `--name` exits with "persistent names are not
-available yet". `mcp-gateway tunnel` exposes a Streamable HTTP server or a
-stdio server you already run. `serve NAME --tunnel` is unchanged.
+Anonymous tunnels need no account. `mcp-gateway login` stores an account
+token so `--name` can keep a hostname. `mcp-gateway tunnel` exposes a
+Streamable HTTP server or a stdio server you already run. `serve NAME --tunnel`
+compiles an OpenAPI spec. See [Persistent names](#persistent-names).
 
 ## 30-second quickstart
 
@@ -87,8 +86,8 @@ another slug, up to eight times, then sends `Rejected` with code
 
 Anonymous draws do not skip the reserved words. `internal` is eight letters
 in the alphabet, so it can be issued. `connect` is seven characters, so the
-WebSocket host cannot be issued as a slug. Those reserved words apply when
-a named hostname exists; this release has no named hostnames.
+WebSocket host cannot be issued as a slug. Those reserved words apply to a named hostname. An anonymous draw can
+still land on `internal`.
 
 Only one label is a tunnel host, and the relay lowercases it before the
 lookup. `connect.mcp.fetchhive.com` is the relay socket.
@@ -99,7 +98,7 @@ lease.
 The reclaim secret is 32 random bytes, encoded base64url without padding
 (43 characters). `Welcome` sends it once. The CLI keeps it in memory. It is
 not printed, and nothing about the tunnel is written to `config.toml`. A
-new process gets a new slug.
+new anonymous process gets a new slug.
 
 The URL is released 30 minutes after the CLI disconnects
 (`lease_grace_secs` 1800). While the lease still exists and no socket is
@@ -121,6 +120,112 @@ per client IP (SHA-256 of the address, key
 `mcp_tunnel:create:<hash>:<unix hour>`). Over that cap the relay sends
 `rate_limited` with `retry_after_secs` 3600 and the message
 `too many anonymous tunnels from this network`.
+
+## Persistent names
+
+`mcp-gateway login` stores an `fh_cli_` account token. After that, a name
+stays reserved while the CLI is offline:
+
+```bash
+mcp-gateway serve petstore --tunnel --name stripe-dev
+mcp-gateway tunnel --name stripe-dev http://127.0.0.1:8000/mcp
+```
+
+`--name` on `serve` turns `--tunnel` on. `--name` with `--stdio` exits 1:
+`--name cannot be combined with --stdio`. With no token the same commands
+exit 1 before any socket opens:
+
+```text
+`--name` needs a Fetch Hive login. Run `mcp-gateway login` (free: 1 persistent endpoint), or drop `--name` for an anonymous URL.
+```
+
+`tunnels list`, `tunnels create`, and `tunnels delete` use that same
+sentence. Token lookup is `MCP_GATEWAY_CLI_TOKEN`, then `credentials.toml`.
+These commands have no `--cli-token` flag. A 401 does not delete the file.
+The token is not printed. An error body that contains `fh_cli_` is replaced
+with `Fetch Hive returned a token on an error response`.
+
+The name is 3 to 48 characters, matching
+`^[a-z0-9]([a-z0-9-]{1,46}[a-z0-9])$`. Uppercase, a leading or trailing
+hyphen, any other character, a reserved word, or an 8-character string from
+the anonymous alphabet is refused locally. `admin` prints `admin is reserved`.
+`abcdefgh` prints `abcdefgh looks like an anonymous tunnel id`. Anything
+else prints `<name> is not a valid tunnel name (<reason>)`.
+
+`serve --name` and `tunnel --name` call `GET /v1/cli/tunnel_endpoints`
+first. They `POST /v1/cli/tunnel_endpoints` with `{"slug":"<name>"}` only
+when that list has no row for the name, so a restart does not get
+`mcp_tunnel_slug_taken` for its own name. The WebSocket upgrade then sends
+`Authorization: Bearer` with the raw `fh_cli_` token and `Hello.mode`
+`{"type":"named","name":"<name>"}`. The bearer is on that upgrade only.
+The CLI does not hash it. The hosted relay computes the SHA-256 hex digest
+of the token string (the `fh_cli_` characters, not a decoded payload) and
+sends that digest to the control plane.
+
+The first `Welcome` for a new reservation prints, once the socket is up:
+
+```text
+✓ reserved stripe-dev for account Developer (1/1 endpoints used)
+```
+
+The account label is the account name plus the plan, or the capitalized
+plan when `name` is null. The quota is `used/limit`, or `used (no cap)`
+when `limit` is null. If `GET /v1/cli/me` fails after the name is saved,
+the quota is `unavailable`. `--json` prints
+`{"event":"reserved","slug","account","tunnel_endpoints"}` with no token.
+
+The status screen lease row is
+`persistent, stays reserved while offline`. The remote row, once connected,
+appends `  (persistent — <label>)`. Anonymous rows stay
+`anonymous, released 30 minutes after disconnect`. Named `Welcome` omits
+`max_session_secs` and sets `lease_grace_secs` to 0. There is no 8 hour
+cap and no 30 minute release. While the name is reserved and the CLI is
+offline, `POST /mcp` is `503`. A second connection with the same name
+closes the older socket with `1012` and reason
+`replaced by a newer connection`. That process exits 1 with
+`tunnel rejected (replaced): replaced by a newer connection` and does not
+dial again.
+
+`mcp-gateway tunnels list` prints name, URL, `online` or `offline`, last
+connected, and created. An empty list prints this line:
+
+```text
+No persistent tunnel names. Reserve one with `mcp-gateway tunnels create NAME`.
+```
+The footer is `used/limit endpoints used`. When `used` is at least `limit`
+it is `used/limit endpoints used · delete one or upgrade`. `--json` prints
+the endpoint array only, one compact JSON value, with no wrapper object.
+
+`tunnels create NAME` always POSTs. `tunnels delete NAME` asks
+`Release NAME? A running tunnel using it will disconnect. [y/N]` on a
+terminal. A non-terminal stdin without `--yes` exits 1 with
+`pass --yes to release a tunnel name without a prompt`. Success prints
+`released NAME; a running tunnel using it will disconnect.` The live CLI
+exits 1 with `tunnel rejected (deleted): endpoint was deleted; run tunnels list`
+and does not dial again. The relay keeps `mcp_tunnel:deleted:<slug>` for 60
+seconds. A hello in that window asks the control plane. When the answer
+says the endpoint was just created (`created: true`), the socket is refused
+with that same deleted message, so a reconnect does not reserve the name
+again. When the answer says the endpoint already exists (`created: false`,
+which is what `serve --name` and `tunnel --name` get after their POST), the
+relay deletes the tombstone and connects. After 60 seconds the key expires
+on its own.
+
+HTTP mapping for these calls:
+
+| Status | What you see | Exit |
+| --- | --- | --- |
+| 401 | login expired or revoked; run `mcp-gateway login` | 1 |
+| 402 `mcp_tunnel_endpoint_limit` | `this plan allows <limit> persistent endpoints (<current> in use). upgrade: <upgrade_url>` | 2 |
+| 403 `mcp_tunnel_not_owner` | `<name> belongs to another account; pick another name` | 1 |
+| 422 `mcp_tunnel_slug_reserved` | `<name> is reserved` | 1 |
+| 422 `mcp_tunnel_slug_invalid` | `<name> is not a valid tunnel name` | 1 |
+| 422 `mcp_tunnel_slug_taken` | `<name> is already reserved` | 1 |
+| 404 on delete | `no tunnel named <name>` | 1 |
+
+The upgrade URL in that 402 sentence is the `upgrade_url` field from the
+response. A 402 body missing `limit`, `current`, or `upgrade_url` prints
+`plan limit reached`.
 
 Before the local router sees a tunneled request, the CLI drops `Host` and
 `Content-Length`, drops hop-by-hop headers and `Cookie`, and forwards
@@ -326,8 +431,8 @@ mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tm
 ```
 
 Pass a URL or `--stdio`, not both. `--bind` is only valid with `--stdio`.
-The default bind is `127.0.0.1:8787`, path `/mcp`. `--name` exits 1 with
-"persistent names are not available yet" before any socket opens.
+The default bind is `127.0.0.1:8787`, path `/mcp`. `--name SLUG` reserves
+that hostname. See [Persistent names](#persistent-names).
 
 ### Where the process will dial
 
@@ -595,5 +700,5 @@ three reasons that this client avoids.
 | New slug after a restart | The reclaim secret is memory-only. A new process does not have it. |
 | `tunnel rejected (maintenance): could not allocate a tunnel name` | Eight slug draws were already leased. The CLI waits 1 second and tries again. |
 | `tunnel rejected (rate_limited): too many anonymous tunnels from this network` | This IP opened 10 anonymous tunnels in the current hour. The CLI waits `retry_after_secs` (3600 on the production relay). |
-| `persistent names are not available yet` | `--name` is hidden until a later release. Drop the flag. |
+| `` `--name` needs a Fetch Hive login `` | No `MCP_GATEWAY_CLI_TOKEN` and no `credentials.toml`. Run `mcp-gateway login`, or drop `--name`. |
 | `--tunnel` with `--stdio` | Usage error. The tunnel needs the HTTP transport. |

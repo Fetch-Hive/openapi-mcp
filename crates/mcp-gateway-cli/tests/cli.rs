@@ -71,7 +71,7 @@ fn help_all_lists_hidden() {
         .stdout(predicate::str::contains("compile <SPEC>"))
         .stdout(predicate::str::contains("list-tools"))
         .stdout(predicate::str::contains(
-            "serve, tunnel, login, logout, whoami, doctor",
+            "serve, tunnel, tunnels, login, logout, whoami, doctor",
         ));
 }
 
@@ -351,7 +351,7 @@ fn serve_help_lists_tunnel_flags() {
         .success()
         .stdout(predicate::str::contains("--tunnel"))
         .stdout(predicate::str::contains("--tunnel-auth"))
-        .stdout(predicate::str::contains("--name").not());
+        .stdout(predicate::str::contains("--name"));
 }
 
 #[test]
@@ -408,7 +408,7 @@ fn serve_tunnel_name_is_rejected() {
         .failure()
         .code(1)
         .stderr(predicate::str::contains(
-            "persistent names are not available yet",
+            "`--name` needs a Fetch Hive login",
         ));
 }
 
@@ -960,7 +960,7 @@ fn tunnel_name_is_rejected() {
         .failure()
         .code(1)
         .stderr(predicate::str::contains(
-            "persistent names are not available yet",
+            "`--name` needs a Fetch Hive login",
         ));
     drop(dir);
 }
