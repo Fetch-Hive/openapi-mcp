@@ -448,19 +448,24 @@ Public HTTP mapping on the tenant host:
 | --- | --- |
 | Body is not a JSON-RPC 2.0 object or array | `400` |
 | `auth_mode` is `token` and `Authorization` is missing | `401`, `WWW-Authenticate: Bearer`, body `{"jsonrpc":"2.0","error":{"code":-32000,"message":"missing authorization"},"id":null}`. No OAuth discovery URL. |
-| No lease for the slug | `404` |
+| No lease and no `mcp_tunnel:reserved:<slug>` key | `404` with an empty body |
 | Method is not `POST`, `GET`, or `DELETE` | `405` |
 | Body larger than `max_body_bytes` | `413` |
 | `POST` `Content-Type` is not `application/json` | `415` |
 | In-flight cap or per-endpoint rate limit | `429` |
 | Socket closed while the request was in flight | `502` |
-| Lease exists, CLI disconnected | `503` |
+| Lease exists, or `mcp_tunnel:reserved:<slug>` is set, and no socket is attached | `503`, `Retry-After: 10`, body `{"jsonrpc":"2.0","error":{"code":-32001,"message":"MCP endpoint offline"},"id":null}` |
 | `request_timeout_secs` elapsed | `504` |
 
 `/health` on a tenant host is `200` from the relay and is not forwarded.
 The body is `{"slug":"<slug>","online":true}` while a socket is attached
-and `{"slug":"<slug>","online":false}` while the lease exists and the CLI
-is gone. Any other path is `404`.
+and `{"slug":"<slug>","online":false}` for every other tenant host, including
+a slug with no lease and no reservation key. Any other path is `404`.
+
+A named reservation writes `mcp_tunnel:reserved:<slug>` with no TTL in the
+same Redis the relay reads. Release deletes that key together with
+`mcp_tunnel:lease:<slug>` and `mcp_tunnel:online:<slug>`. Anonymous slugs
+never get the reserved key. After release, `POST /mcp` is `404`.
 
 WebSocket close codes:
 

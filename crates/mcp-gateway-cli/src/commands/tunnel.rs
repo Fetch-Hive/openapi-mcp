@@ -36,6 +36,9 @@ pub async fn run(
     no_probe: bool,
     allow_remote_upstream: bool,
 ) -> Result<ExitCode, CliError> {
+    if let Some(slug) = name.as_deref() {
+        crate::commands::named::guard_production_relay(paths, slug)?;
+    }
     let named = match name.as_deref() {
         Some(slug) => Some(crate::commands::named::prepare(paths, slug).await?),
         None => None,

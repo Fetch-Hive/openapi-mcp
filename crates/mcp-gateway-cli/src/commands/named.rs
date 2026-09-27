@@ -61,6 +61,41 @@ pub fn check_slug(slug: &str) -> Result<(), CliError> {
     validate_named_slug(slug).map_err(|err| CliError::usage(slug_message(slug, err)))
 }
 
+/// The hosted relay authorizes tokens at `https://api.fetchhive.com`.
+/// A login stored for another API is refused before the socket opens.
+pub fn guard_production_relay(paths: &PlatformPaths, slug: &str) -> Result<(), CliError> {
+    check_slug(slug)?;
+    let configured = if paths.config_file.exists() {
+        super::load_cfg(paths)?.tunnel.relay_url
+    } else {
+        String::new()
+    };
+    let relay = mcp_gateway_tunnel::resolve_relay_url(&configured);
+    let account = open_account(&paths.credentials_file)?;
+    ensure_relay_account(&relay, account.client.api_url())
+}
+
+pub fn ensure_relay_account(relay_url: &str, api_url: &str) -> Result<(), CliError> {
+    let relay_host = url_host(relay_url);
+    let api_host = url_host(api_url);
+    let production_api = url_host(crate::fetchhive::DEFAULT_API_URL);
+    if relay_host == mcp_gateway_tunnel_proto::CONNECT_HOST && api_host != production_api {
+        return Err(CliError::usage(format!(
+            "this login is for {api_url}. {relay_host} checks tokens with {}. Run `mcp-gateway login --api-url {}`, or set MCP_GATEWAY_RELAY_URL to a relay for this login.",
+            crate::fetchhive::DEFAULT_API_URL,
+            crate::fetchhive::DEFAULT_API_URL
+        )));
+    }
+    Ok(())
+}
+
+fn url_host(raw: &str) -> String {
+    url::Url::parse(raw)
+        .ok()
+        .and_then(|parsed| parsed.host_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
 pub fn announce_reserved(out: &Output, session: &NamedSession) {
     if out.json {
         super::serve::print_event(&serde_json::json!({
@@ -118,6 +153,42 @@ pub(crate) fn identity(account: &AccountClient) -> Result<(String, String), CliE
         Err(WhoamiError::Other(_)) => {
             Ok((account.label_fallback.clone(), "unavailable".to_owned()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_relay_account;
+
+    #[test]
+    fn production_relay_rejects_a_different_api() {
+        let err = ensure_relay_account(
+            "wss://connect.mcp.fetchhive.com/v1/tunnel",
+            "https://api.hive.test:4343",
+        )
+        .unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("https://api.hive.test:4343"), "{message}");
+        assert!(message.contains("https://api.fetchhive.com"), "{message}");
+        assert!(message.contains("MCP_GATEWAY_RELAY_URL"), "{message}");
+    }
+
+    #[test]
+    fn production_pair_is_allowed() {
+        ensure_relay_account(
+            "wss://connect.mcp.fetchhive.com/v1/tunnel",
+            "https://api.fetchhive.com",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_custom_relay_keeps_its_api() {
+        ensure_relay_account(
+            "wss://connect.hive.test/v1/tunnel",
+            "https://api.hive.test:4343",
+        )
+        .unwrap();
     }
 }
 

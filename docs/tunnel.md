@@ -179,8 +179,12 @@ The status screen lease row is
 appends `  (persistent — <label>)`. Anonymous rows stay
 `anonymous, released 30 minutes after disconnect`. Named `Welcome` omits
 `max_session_secs` and sets `lease_grace_secs` to 0. There is no 8 hour
-cap and no 30 minute release. While the name is reserved and the CLI is
-offline, `POST /mcp` is `503`. A second connection with the same name
+cap and no 30 minute release. Reserving a name writes Redis
+`mcp_tunnel:reserved:<slug>` with no TTL. While the CLI socket is down,
+`POST /mcp` is `503` with `Retry-After: 10` and JSON-RPC code `-32001` when
+that key is set or a lease exists. Releasing the name deletes the reserved
+key, the lease, and the online key. A hostname with none of those keys is
+`404` with an empty body. A second connection with the same name
 closes the older socket with `1012` and reason
 `replaced by a newer connection`. That process exits 1 with
 `tunnel rejected (replaced): replaced by a newer connection` and does not
@@ -695,10 +699,13 @@ three reasons that this client avoids.
 | `401`, `WWW-Authenticate: Bearer`, JSON-RPC `-32000` `missing authorization` | Token mode, and the request had no `Authorization: Bearer` header. |
 | `429`, JSON-RPC `-32000` `too many in-flight requests`, `Retry-After: 1` | The CLI already has `max_inflight` calls running (16 unless `Welcome` said otherwise). The local API was not called. |
 | `429` `rate limit exceeded` | The relay's per-slug per-minute cap was hit (60 by default). |
-| `404` | No lease for that slug. The banner URL is the one that works. |
+| `404` | No lease and no `mcp_tunnel:reserved:<slug>` key. The banner URL is the one that works. |
 | Status says `reconnecting (attempt N, next dial in D)` | The CLI is waiting `D`, then dialing again. `N` starts at 0. The slug stays when the secret is still valid. `reclaim_expired` uses the same status and then a new remote URL. |
 | New slug after a restart | The reclaim secret is memory-only. A new process does not have it. |
 | `tunnel rejected (maintenance): could not allocate a tunnel name` | Eight slug draws were already leased. The CLI waits 1 second and tries again. |
 | `tunnel rejected (rate_limited): too many anonymous tunnels from this network` | This IP opened 10 anonymous tunnels in the current hour. The CLI waits `retry_after_secs` (3600 on the production relay). |
 | `` `--name` needs a Fetch Hive login `` | No `MCP_GATEWAY_CLI_TOKEN` and no `credentials.toml`. Run `mcp-gateway login`, or drop `--name`. |
+| `this login is for <api>. connect.mcp.fetchhive.com checks tokens with https://api.fetchhive.com` | `credentials.toml` `api_url` is a different host from `api.fetchhive.com`, and the relay is the hosted one. Run `mcp-gateway login --api-url https://api.fetchhive.com`, or set `MCP_GATEWAY_RELAY_URL` to a relay for that login. The CLI exits before it reserves a name or opens the socket. |
+| `tunnel rejected (unauthorized): the tunnel relay could not sign in to Fetch Hive` | The relay's call to the control plane was `401` with `error_code` `unauthorized`. The CLI token was not the thing rejected. |
+| `tunnel rejected (unauthorized): login expired or revoked; run mcp-gateway login` | The control plane returned `401` with `error_code` `cli_token_invalid` (or a `401` body with no `error_code`). |
 | `--tunnel` with `--stdio` | Usage error. The tunnel needs the HTTP transport. |

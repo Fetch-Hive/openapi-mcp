@@ -38,6 +38,9 @@ pub async fn run(
     if stdio && tunnel_name.is_some() {
         return Err(CliError::usage("--name cannot be combined with --stdio"));
     }
+    if let Some(slug) = tunnel_name.as_deref() {
+        crate::commands::named::guard_production_relay(paths, slug)?;
+    }
     let named = match tunnel_name.as_deref() {
         Some(slug) => Some(crate::commands::named::prepare(paths, slug).await?),
         None => None,
