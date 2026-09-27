@@ -156,6 +156,14 @@ pub(crate) fn identity(account: &AccountClient) -> Result<(String, String), CliE
     }
 }
 
+fn slug_message(slug: &str, err: SlugError) -> String {
+    match err {
+        SlugError::Reserved => format!("{slug} is reserved"),
+        SlugError::AnonymousShaped => format!("{slug} looks like an anonymous tunnel id"),
+        other => format!("{slug} is not a valid tunnel name ({other})"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::ensure_relay_account;
@@ -189,13 +197,5 @@ mod tests {
             "https://api.hive.test:4343",
         )
         .unwrap();
-    }
-}
-
-fn slug_message(slug: &str, err: SlugError) -> String {
-    match err {
-        SlugError::Reserved => format!("{slug} is reserved"),
-        SlugError::AnonymousShaped => format!("{slug} looks like an anonymous tunnel id"),
-        other => format!("{slug} is not a valid tunnel name ({other})"),
     }
 }
