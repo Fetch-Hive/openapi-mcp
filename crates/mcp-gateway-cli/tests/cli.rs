@@ -126,6 +126,113 @@ fn add_spec_ssrf_metadata() {
         .stderr(predicate::str::contains("spec URL rejected"));
 }
 
+const LOCAL_OPENAPI: &[u8] = br#"{"openapi":"3.0.3","info":{"title":"Issues","version":"1"},"paths":{"/issues":{"get":{"operationId":"listIssues","responses":{"200":{"description":"ok"}}}}}}"#;
+
+fn serve_openapi() -> (u16, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                LOCAL_OPENAPI.len()
+            );
+            let _ = stream.write_all(resp.as_bytes());
+            let _ = stream.write_all(LOCAL_OPENAPI);
+        }
+    });
+    (port, handle)
+}
+
+fn init_only() -> (TempDir, std::path::PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let cfg = dir.path().join("config.toml");
+    bin()
+        .args(["--config", cfg.to_str().unwrap(), "init"])
+        .assert()
+        .success();
+    (dir, cfg)
+}
+
+#[test]
+fn add_spec_http_loopback_url_with_both_flags() {
+    let (_dir, cfg) = init_only();
+    let (port, handle) = serve_openapi();
+    let url = format!("http://127.0.0.1:{port}/openapi.json");
+    bin()
+        .args([
+            "--config",
+            cfg.to_str().unwrap(),
+            "--allow-private-networks",
+            "add-spec",
+            "--name",
+            "issues",
+            "--url",
+            &url,
+            "--insecure-http",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "HTTP, loopback/private only, 10 MiB cap, 15s",
+        ))
+        .stdout(predicate::str::contains("Wrote spec [issues]"));
+    let _ = handle.join();
+}
+
+#[test]
+fn add_spec_http_loopback_names_each_missing_flag() {
+    let (_dir, cfg) = init_only();
+    let url = "http://127.0.0.1:8000/openapi.json";
+    let cfg_arg = cfg.to_str().unwrap();
+    // Policy rejection is exit 2. The compile crate's SafetyError code is 3;
+    // `check_spec_url` maps the pin failure to CliError::Policy before compile.
+    bin()
+        .args([
+            "--config", cfg_arg, "add-spec", "--name", "issues", "--url", url,
+        ])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("pass --insecure-http"))
+        .stderr(predicate::str::contains("pass --allow-private-networks"));
+    bin()
+        .args([
+            "--config",
+            cfg_arg,
+            "--allow-private-networks",
+            "add-spec",
+            "--name",
+            "issues",
+            "--url",
+            url,
+        ])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("pass --insecure-http"))
+        .stderr(predicate::str::contains("pass --allow-private-networks").not());
+    bin()
+        .args([
+            "--config",
+            cfg_arg,
+            "add-spec",
+            "--name",
+            "issues",
+            "--url",
+            url,
+            "--insecure-http",
+        ])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("pass --allow-private-networks"))
+        .stderr(predicate::str::contains("pass --insecure-http").not());
+}
+
 #[test]
 fn auth_add_missing_env() {
     let (_dir, cfg, _) = primed();

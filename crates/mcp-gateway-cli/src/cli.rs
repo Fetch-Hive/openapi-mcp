@@ -62,6 +62,9 @@ pub enum Commands {
     AddSpec {
         #[arg(long)]
         name: String,
+        /// OpenAPI document URL. HTTPS by default. `http://` is accepted only
+        /// with `--insecure-http` and `--allow-private-networks`, and only when
+        /// the host is loopback, RFC1918, or IPv6 ULA.
         #[arg(long, conflicts_with = "file")]
         url: Option<String>,
         #[arg(long)]
@@ -117,8 +120,10 @@ pub enum Commands {
         /// Absolute upstream origin. Overrides OpenAPI `servers` for this process.
         #[arg(long)]
         base_url: Option<String>,
-        /// HTTPS OpenAPI document URL. Used when NAME is not in config (PaaS bootstrap).
-        /// Overrides $MCP_GATEWAY_SPEC_URL.
+        /// OpenAPI document URL when NAME is not in config (PaaS bootstrap).
+        /// Overrides $MCP_GATEWAY_SPEC_URL. HTTPS by default. `http://` needs
+        /// `--allow-insecure-http` and `--allow-private-networks`, and a
+        /// loopback, RFC1918, or IPv6 ULA host.
         #[arg(long)]
         url: Option<String>,
     },

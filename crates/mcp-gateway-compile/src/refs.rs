@@ -81,6 +81,9 @@ impl Retriever {
             return Err(RefError::Budget);
         }
 
+        // Absolute `http://` `$ref`s stay unresolved. A local HTTP spec document
+        // is fetched by the loader when both opt-ins are set; remote refs here
+        // remain `https://` or `file:` only.
         let value = if url.starts_with("https://") {
             let parsed = safety::parse_https_url_with(url, self.safety)?;
             let host = parsed.host_str().unwrap_or_default();

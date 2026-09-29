@@ -1,4 +1,9 @@
-//! Capped blocking HTTPS GET used by the spec loader and `$ref` retriever.
+//! Capped blocking GET used by the spec loader and `$ref` retriever.
+//!
+//! The client does not follow redirects and does not use `HTTP_PROXY`,
+//! `HTTPS_PROXY`, or `ALL_PROXY`. `https_only` stays on unless the caller has
+//! already accepted an `http` URL (loopback, RFC1918, or ULA, with both
+//! opt-ins). A `302` is a failed download, not a second request.
 
 use std::io::{self, Write};
 use std::time::Duration;
@@ -18,13 +23,22 @@ pub fn download_https_capped(
     max_bytes: usize,
     timeout: Duration,
 ) -> Result<Vec<u8>, DownloadError> {
+    download_capped(url, max_bytes, timeout, false)
+}
+
+pub fn download_capped(
+    url: &str,
+    max_bytes: usize,
+    timeout: Duration,
+    allow_http: bool,
+) -> Result<Vec<u8>, DownloadError> {
     // `reqwest::blocking` builds a private Tokio runtime. Dropping that runtime
     // panics when this function is called from inside another runtime (the CLI
     // runs every command under `block_on`). A fresh thread has no entered runtime.
     let url = url.to_owned();
     let handle = std::thread::Builder::new()
         .name("mcp-gateway-spec-download".into())
-        .spawn(move || download_https_capped_blocking(&url, max_bytes, timeout))
+        .spawn(move || download_capped_blocking(&url, max_bytes, timeout, allow_http))
         .map_err(|e| DownloadError::Failed(e.to_string()))?;
     match handle.join() {
         Ok(result) => result,
@@ -32,15 +46,17 @@ pub fn download_https_capped(
     }
 }
 
-fn download_https_capped_blocking(
+fn download_capped_blocking(
     url: &str,
     max_bytes: usize,
     timeout: Duration,
+    allow_http: bool,
 ) -> Result<Vec<u8>, DownloadError> {
     let client = reqwest::blocking::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(timeout)
-        .https_only(true)
+        .https_only(!allow_http)
+        .no_proxy()
         .build()
         .map_err(|e| DownloadError::Failed(e.to_string()))?;
     let mut response = client

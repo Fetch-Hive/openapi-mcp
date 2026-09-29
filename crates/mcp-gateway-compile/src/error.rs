@@ -29,4 +29,10 @@ impl CompileError {
             Self::Safety(_) => 3,
         }
     }
+
+    /// Safety failures from a direct check or from the spec loader. The CLI
+    /// maps these to its policy exit (2), not the compile-crate code 3.
+    pub fn is_safety(&self) -> bool {
+        matches!(self, Self::Safety(_) | Self::Load(LoadError::Safety(_)))
+    }
 }

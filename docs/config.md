@@ -37,12 +37,18 @@ Windows uses `fetchhive\mcp-gateway`.
 PaaS (`serve` on Heroku / Render / DigitalOcean): if `--bind` is omitted and
 `PORT` is set, the process listens on `0.0.0.0:$PORT` with `--expose` (the
 image is distroless, so `$PORT` cannot be interpolated in `CMD`). If `NAME` is
-not in config, `serve --url` or `$MCP_GATEWAY_SPEC_URL` compiles that HTTPS
-OpenAPI document first. Bearer tokens stay in `$MCP_GATEWAY_TOKEN`, never in
+not in config, `serve --url` or `$MCP_GATEWAY_SPEC_URL` compiles that
+OpenAPI document first. The URL is HTTPS unless it is a loopback, RFC1918,
+or ULA `http://` URL and both `ssrf` opt-ins below are set. Bearer tokens stay in `$MCP_GATEWAY_TOKEN`, never in
 TOML. See [deploy](deploy/README.md).
 
 `[[specs]].url` is the OpenAPI document URL. Relative `servers` entries are
-resolved against it. `[[specs]].base_url` (optional) is an absolute upstream
-origin that overrides `servers` for `test` and `serve`. For a local checkout,
-that is often `http://127.0.0.1:3000` together with
-`ssrf.allow_private_networks = true` and `ssrf.allow_insecure_http = true`.
+resolved against it. An `http://` value is stored only when the fetch was
+allowed: `ssrf.allow_insecure_http = true` and
+`ssrf.allow_private_networks = true`, and the host is loopback, RFC1918, or
+IPv6 ULA. Those two keys are the config form of `--insecure-http` and
+`--allow-private-networks`. A public `http://` URL is refused (exit 2) even
+when both are `true`. Cloud metadata addresses are refused even when both are
+`true`. `[[specs]].base_url` (optional) is an absolute upstream origin that
+overrides `servers` for `test` and `serve`. For a local checkout, that is
+often `http://127.0.0.1:3000` together with the same two `ssrf` keys.

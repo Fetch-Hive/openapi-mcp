@@ -10,6 +10,11 @@ Use it in **both** places:
 | **WIP / branch** | `http://127.0.0.1:3000` (or Docker RFC1918) | `--allow-private-networks` and `--insecure-http` |
 | **Live** | `https://api.example.com` | defaults |
 
+The same two flags are required to `add-spec --url http://127.0.0.1:3000/openapi.json`.
+`--file ./openapi.yaml` does not fetch the document; it still needs
+`--base-url` when `servers` is relative, and both flags when that origin is
+HTTP on a private host. A public `http://` spec URL is refused.
+
 The editor talks to the gateway (`http://127.0.0.1:8787/mcp` locally, or
 `https://your-host/mcp` after deploy). The gateway talks to **your** API.
 

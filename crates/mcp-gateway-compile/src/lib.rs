@@ -20,7 +20,8 @@ pub use error::CompileError;
 pub use loader::{load, load_bytes, load_file, LoadedSpec, OpenApiFamily, SpecFormat, SpecSource};
 pub use names::{candidate_name, normalize as normalize_name, uniquify, NameSource};
 pub use safety::{
-    check_host, is_blocked_ip, parse_https_url, resolve_and_check, SafetyError, SafetyOpts,
+    check_host, is_blocked_ip, parse_https_url, parse_https_url_with, resolve_and_check,
+    SafetyError, SafetyOpts,
 };
 pub use server_url::{is_absolute_http_url, resolve_server_url};
 

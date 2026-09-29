@@ -77,7 +77,8 @@ pub fn load_with(source: SpecSource, safety_opts: SafetyOpts) -> Result<LoadedSp
             let url = safety::parse_https_url_with(raw, safety_opts)?;
             let host = url.host_str().unwrap_or_default();
             safety::resolve_and_check_with(host, safety_opts)?;
-            let bytes = download_https(url.as_str())?;
+            let allow_http = url.scheme() == "http";
+            let bytes = download_spec(url.as_str(), allow_http)?;
             (bytes, SourceKind::Url, strip_credentials(raw))
         }
     };
@@ -170,8 +171,8 @@ fn read_capped(mut reader: impl Read) -> Result<Vec<u8>, LoadError> {
     Ok(buf)
 }
 
-fn download_https(url: &str) -> Result<Vec<u8>, LoadError> {
-    match crate::http::download_https_capped(url, SPEC_MAX_BYTES, SPEC_TIMEOUT) {
+fn download_spec(url: &str, allow_http: bool) -> Result<Vec<u8>, LoadError> {
+    match crate::http::download_capped(url, SPEC_MAX_BYTES, SPEC_TIMEOUT, allow_http) {
         Ok(bytes) => Ok(bytes),
         Err(crate::http::DownloadError::TooLarge) => Err(LoadError::TooLarge),
         Err(crate::http::DownloadError::Failed(msg)) => Err(LoadError::Download(msg)),
@@ -229,5 +230,87 @@ mod tests {
     fn rejects_oversize() {
         let err = load_bytes(vec![0; SPEC_MAX_BYTES + 1], SourceKind::Stdin, "-").unwrap_err();
         assert!(matches!(err, LoadError::TooLarge));
+    }
+
+    const LOCAL_SPEC: &[u8] = br#"{"openapi":"3.0.3","info":{"title":"Local","version":"1"},"paths":{"/ping":{"get":{"operationId":"ping","responses":{"200":{"description":"ok"}}}}}}"#;
+
+    fn both_flags() -> crate::safety::SafetyOpts {
+        crate::safety::SafetyOpts {
+            allow_private: true,
+            allow_insecure_http: true,
+        }
+    }
+
+    /// One HTTP response, then the thread exits. Redirects are not followed by
+    /// the client; this helper only serves the status line it is given.
+    fn serve_once(status_and_headers: &'static str, body: &'static [u8]) -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let Ok((mut sock, _)) = listener.accept() else {
+                return;
+            };
+            let _ = sock.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            while !buf.windows(4).any(|w| w == b"\r\n\r\n") && buf.len() < 8192 {
+                match std::io::Read::read(&mut sock, &mut tmp) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => buf.extend_from_slice(&tmp[..n]),
+                }
+            }
+            let head = format!(
+                "{status_and_headers}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            let _ = std::io::Write::write_all(&mut sock, head.as_bytes());
+            let _ = std::io::Write::write_all(&mut sock, body);
+        });
+        port
+    }
+
+    #[test]
+    fn loads_loopback_http_only_with_both_flags() {
+        let port = serve_once("HTTP/1.1 200 OK", LOCAL_SPEC);
+        let url = format!("http://127.0.0.1:{port}/openapi.json");
+        let missing = load_with(
+            SpecSource::Url(url.clone()),
+            crate::safety::SafetyOpts::default(),
+        );
+        assert!(missing.is_err(), "http without flags must be refused");
+        let private_only = load_with(
+            SpecSource::Url(url.clone()),
+            crate::safety::SafetyOpts {
+                allow_private: true,
+                allow_insecure_http: false,
+            },
+        );
+        assert!(private_only.is_err());
+        let http_only = load_with(
+            SpecSource::Url(url.clone()),
+            crate::safety::SafetyOpts {
+                allow_private: false,
+                allow_insecure_http: true,
+            },
+        );
+        assert!(http_only.is_err());
+        let loaded = load_with(SpecSource::Url(url), both_flags()).unwrap();
+        assert_eq!(loaded.family, OpenApiFamily::V3_0);
+        assert!(loaded.bytes.windows(5).any(|w| w == b"Local"));
+    }
+
+    #[test]
+    fn http_redirect_is_not_followed() {
+        let port = serve_once(
+            "HTTP/1.1 302 Found\r\nLocation: http://example.com/stolen",
+            b"",
+        );
+        let url = format!("http://127.0.0.1:{port}/openapi.json");
+        let err = load_with(SpecSource::Url(url), both_flags()).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("302"),
+            "redirect must fail the download, got {msg}"
+        );
     }
 }

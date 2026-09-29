@@ -19,7 +19,7 @@ Heroku and DigitalOcean build.
 | Variable | Required | Notes |
 |---|---|---|
 | `MCP_GATEWAY_TOKEN` | yes | MCP bearer for clients. Never put it in TOML. |
-| `MCP_GATEWAY_SPEC_URL` | yes on first boot | HTTPS URL of an OpenAPI document. Same SSRF policy as `add-spec --url`. |
+| `MCP_GATEWAY_SPEC_URL` | yes on first boot | OpenAPI document URL. Same rules as `add-spec --url`: HTTPS by default. `http://` only for a loopback, RFC1918, or ULA host when `ssrf.allow_insecure_http` and `ssrf.allow_private_networks` are both true. A public HTTP URL is refused. |
 | `PORT` | injected by PaaS | When `--bind` is omitted, listen on `0.0.0.0:$PORT` with `--expose`. |
 | `MCP_GATEWAY_CONFIG` | optional | Persist config (Render disk / Hetzner volume): `/data/config.toml`. |
 

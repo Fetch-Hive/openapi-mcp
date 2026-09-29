@@ -5,14 +5,14 @@ Generated from clap. Hidden aliases (`compile`, `list-tools`, `call`,
 
 ```text
 mcp-gateway init [--force] [--bind ADDR] [--allow-private-networks]
-mcp-gateway add-spec --name NAME (--url HTTPS_URL | --file PATH) [--base-url URL] [--insecure-http]
+mcp-gateway add-spec --name NAME (--url URL | --file PATH) [--base-url URL] [--insecure-http]
 mcp-gateway list [--json]
 mcp-gateway inspect [NAME] [--tool TOOL] [--client cursor|claude-code|codex|vscode|claude|chatgpt]
 mcp-gateway auth add NAME --type none|bearer|basic|api_key_header|api_key_query|custom_headers
              (--from-env VAR | --from-file PATH)
 mcp-gateway auth list [NAME]
 mcp-gateway auth remove NAME
-mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--tunnel] [--tunnel-auth token|public] [--base-url URL] [--url HTTPS_URL]
+mcp-gateway serve NAME [--stdio | --bind ADDR] [--path /mcp] [--expose] [--allow-anonymous] [--tunnel] [--tunnel-auth token|public] [--base-url URL] [--url URL]
 mcp-gateway tunnel (<URL> | --stdio -- CMD...) [--tunnel-auth token|passthrough|public] [--token TOKEN] [--bind ADDR] [--no-probe] [--allow-remote-upstream]
 mcp-gateway login [--no-browser] [--api-url URL] [--force]
 mcp-gateway logout [--keep-remote] [--api-url URL]
@@ -31,6 +31,23 @@ not the literal id. `inspect NAME --tool TOOL` and `mcp-gateway test NAME TOOL`
 require that compiled name. `inspect NAME --client …` prints a paste-ready
 snippet and where to put it ([clients](clients.md)).
 
+`add-spec --url` and `serve --url` fetch the OpenAPI document. The default is
+HTTPS. `http://` is accepted only when both `--insecure-http` and
+`--allow-private-networks` are set (either flag may instead be
+`ssrf.allow_insecure_http` / `ssrf.allow_private_networks` in config) and the
+host is loopback, RFC1918, or IPv6 ULA. `serve` spells the HTTP opt-in
+`--allow-insecure-http`. Any other combination is refused with exit code `2`
+(policy). The error names the missing flag. It does not tell you to pass a
+flag that is already set. A public `http://` host is refused even with both
+flags. Cloud metadata addresses (`169.254.169.254`, `fd00:ec2::254`,
+link-local, and names such as `metadata.google.internal`) are refused with
+exit code `2` even when both flags are set. The fetch does not follow
+redirects: a `302` fails the download and is not requested again. The GET
+ignores `HTTP_PROXY`, `HTTPS_PROXY`, and `ALL_PROXY`. The body
+cap is 10 MiB and the timeout is 15 seconds. An absolute `http://` `$ref`
+inside the document stays unresolved. Relative and in-document `$ref`s are
+bundled. A remote `$ref` must be `https://` or `file:`.
+
 Relative OpenAPI `servers` URLs (Petstore's `/api/v3`) are resolved against the
 spec document URL when you `add-spec --url`. Already-cached IR is resolved the
 same way at `test`/`serve` if the spec entry still has `url`. For a local file
@@ -44,7 +61,9 @@ resolved upstream URL. A 5xx is the remote API (the public Petstore `getInventor
 On Heroku, Render, and DigitalOcean App Platform, omit `--bind` and set `PORT`
 (the platform injects it). `serve` binds `0.0.0.0:$PORT` and enables `--expose`.
 If the spec is not in config, pass `--url` or set `MCP_GATEWAY_SPEC_URL` to an
-HTTPS OpenAPI document. Set `MCP_GATEWAY_TOKEN`. See [deploy](deploy/README.md).
+OpenAPI document. That URL is HTTPS unless it is a loopback, RFC1918, or ULA
+`http://` URL and both HTTP opt-ins above are set. Set `MCP_GATEWAY_TOKEN`.
+See [deploy](deploy/README.md).
 
 Global flags: `--config PATH`, `-v`/`--verbose`, `-q`/`--quiet`, `--json`,
 `--color auto|always|never`, `--allow-private-networks`.

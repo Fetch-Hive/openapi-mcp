@@ -8,8 +8,10 @@ use crate::output::Output;
 use crate::paths::PlatformPaths;
 use crate::runtime::{resolver, ssrf_policy, upstream_base_url};
 use crate::CliError;
-use mcp_gateway_compile::{compile_with, CompileOptions, SafetyOpts, SpecSource};
-use mcp_gateway_proxy::ssrf::pin_url;
+use mcp_gateway_compile::{
+    compile_with, parse_https_url_with, CompileOptions, SafetyOpts, SpecSource,
+};
+use mcp_gateway_proxy::ssrf::{pin_url, SsrfError, SsrfPolicy};
 use std::path::PathBuf;
 use url::Url;
 
@@ -41,7 +43,7 @@ pub async fn add(
     let source = match (url.as_deref(), file.as_deref()) {
         (Some(u), None) => {
             check_spec_url(u, globals, &cfg, insecure_http).await?;
-            out.line(&format!("Fetching {u} (HTTPS, 10 MiB cap, 15s)"));
+            out.line(&format!("Fetching {u} ({})", fetch_note(u)));
             out.verbose("spec URL passed SSRF pin");
             SpecSource::Url(u.to_owned())
         }
@@ -52,16 +54,15 @@ pub async fn add(
             ))
         }
     };
-    let allow_private = globals.allow_private_networks || cfg.ssrf.allow_private_networks;
     let bundle = compile_with(
         source,
         CompileOptions {
             max_ops: None,
-            safety: SafetyOpts { allow_private },
+            safety: safety_opts(globals, &cfg, insecure_http),
         },
     )
     .map_err(|e| {
-        if matches!(e, mcp_gateway_compile::CompileError::Safety(_)) {
+        if e.is_safety() {
             CliError::policy(e.to_string())
         } else {
             CliError::usage(e.to_string())
@@ -167,13 +168,97 @@ pub(crate) async fn check_spec_url(
         .await
         .map_err(|e| {
             CliError::policy(format!(
-                "spec URL rejected ({})\n  host: {}\n  reason: {}\nhint: HTTPS public URLs only by default (see docs/ssrf.md).\n      to compile a spec on your private network, pass\n      --allow-private-networks (prints a warning; see mcp-gateway doctor)",
+                "spec URL rejected ({})\n  host: {}\n  reason: {}\n{}",
                 e.error_code(),
                 url.host_str().unwrap_or_default(),
-                e
+                e,
+                spec_url_hint(&url, &policy, &e)
             ))
         })?;
+    // Pin allows any http host once `--insecure-http` is set. The compile gate
+    // is what refuses a public http host. Run it here so that refusal happens
+    // before "Fetching…" and uses the same classifier as the download.
+    if url.scheme() == "http" {
+        parse_https_url_with(raw, safety_opts(globals, cfg, insecure_http))
+            .map_err(|e| CliError::policy(format!("{e}\n      see docs/ssrf.md")))?;
+    }
     Ok(())
+}
+
+/// `SsrfPolicy::allow_private_networks` is false unless the `self-host` feature
+/// is enabled. The CLI dependency always turns that feature on, including with
+/// `--no-default-features`, so this matches the pin check. A build that somehow
+/// lacked the feature would keep `allow_private` false here instead of letting
+/// the compile gate allow RFC1918 on its own.
+fn safety_opts(globals: &Globals, cfg: &GatewayConfig, insecure_http: bool) -> SafetyOpts {
+    let policy = ssrf_policy(globals, cfg, insecure_http);
+    SafetyOpts {
+        allow_private: policy.allow_private_networks(),
+        allow_insecure_http: policy.allow_insecure_http(),
+    }
+}
+
+fn fetch_note(raw: &str) -> &'static str {
+    match Url::parse(raw).map(|url| url.scheme().to_ascii_lowercase()) {
+        Ok(scheme) if scheme == "http" => "HTTP, loopback/private only, 10 MiB cap, 15s",
+        _ => "HTTPS, 10 MiB cap, 15s",
+    }
+}
+
+fn spec_url_hint(url: &Url, policy: &SsrfPolicy, err: &SsrfError) -> String {
+    let mut hints = Vec::new();
+    match err.error_code() {
+        "scheme_forbidden" if url.scheme() == "http" => {
+            hints.push(
+                "pass --insecure-http to allow HTTP (or set ssrf.allow_insecure_http = true). `serve` spells this --allow-insecure-http".to_string(),
+            );
+            // Pin stops at the scheme, so a loopback URL never reaches the
+            // address check. Name that second flag here. RFC1918 is not
+            // classified in the CLI; the next failure says so.
+            if !policy.allow_private_networks() && host_is_loopback_name(url) {
+                hints.push(allow_private_hint());
+            }
+        }
+        "hostname_denied" | "address_blocked" | "resolved_blocked"
+            if !policy.allow_private_networks() =>
+        {
+            hints.push(allow_private_hint());
+        }
+        // `--allow-private-networks` also opens non-default ports. A loopback
+        // spec on :8000 fails here before the address check.
+        "port_forbidden" if !policy.allow_private_networks() && host_is_loopback_name(url) => {
+            hints.push(allow_private_hint());
+        }
+        "address_blocked" | "resolved_blocked" => {
+            hints.push(
+                "this address stays blocked (link-local, metadata, or non-global). HTTP does not make it reachable".to_string(),
+            );
+        }
+        _ => {}
+    }
+    if hints.is_empty() {
+        return "hint: HTTPS public URLs only by default (see docs/ssrf.md).".to_string();
+    }
+    let mut msg = String::from("hint: ");
+    msg.push_str(&hints.join("\n      "));
+    msg.push_str("\n      see docs/ssrf.md");
+    msg
+}
+
+fn allow_private_hint() -> String {
+    "pass --allow-private-networks to reach loopback, RFC1918, and ULA (link-local and metadata stay blocked; prints a warning; see mcp-gateway doctor)".to_string()
+}
+
+fn host_is_loopback_name(url: &Url) -> bool {
+    match url.host() {
+        Some(url::Host::Domain(domain)) => {
+            let domain = domain.to_ascii_lowercase();
+            domain == "localhost" || domain.ends_with(".localhost")
+        }
+        Some(url::Host::Ipv4(v4)) => v4.is_loopback(),
+        Some(url::Host::Ipv6(v6)) => v6.is_loopback(),
+        None => false,
+    }
 }
 
 pub fn list(paths: &PlatformPaths, out: &Output) -> Result<ExitCode, CliError> {

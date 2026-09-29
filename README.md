@@ -16,13 +16,23 @@ https://fetchhive.com/mcp
 
 ### 1. Local / branch API → editor
 
-Your server is already running on this machine. Compile the OpenAPI, proxy
-loopback, paste a snippet into Cursor / Codex / Claude Code.
+Your server is already running on this machine. It does not need to be an MCP
+server. The gateway compiles the OpenAPI document and serves the MCP endpoint.
+`mcp-gateway tunnel <mcp-url>` is the other flow: the local process already
+speaks MCP. A plain REST app returning 404 for `POST /mcp` is expected.
+
+Compile from a file, or from the OpenAPI URL the API already serves. Use one
+`add-spec` command, not both.
 
 ```bash
 mcp-gateway init --allow-private-networks
+# from a file:
 mcp-gateway add-spec --name demo --file ./openapi.yaml \
   --base-url http://127.0.0.1:3000 --insecure-http
+# or from the URL the API already serves:
+mcp-gateway add-spec --name demo \
+  --url http://127.0.0.1:3000/openapi.json \
+  --insecure-http --allow-private-networks
 export MCP_GATEWAY_TOKEN=…   # printed once by init
 mcp-gateway test demo list_pets --args '{}'
 mcp-gateway serve demo
@@ -30,8 +40,12 @@ mcp-gateway inspect demo --client cursor      # or: codex | claude-code | vscode
 ```
 
 `--allow-private-networks` is required for loopback and RFC1918. `--insecure-http`
-is required when the API speaks HTTP (typical on localhost). `--base-url` is the
-origin of **this** checkout, not production.
+is required when the API speaks HTTP (typical on localhost). Both flags are
+required together to fetch an `http://` spec URL, and that host must be
+loopback, RFC1918, or IPv6 ULA. A public `http://` URL is refused. `--file`
+does not fetch anything; `--base-url` is the origin of **this** checkout, not
+production, and still needs both flags when that origin is HTTP on a private
+host.
 
 ### 2. Live API → editor or agent
 
@@ -88,7 +102,7 @@ Guides: [Render](docs/deploy/render.md) · [Heroku](docs/deploy/heroku.md) ·
 [DigitalOcean](docs/deploy/digitalocean.md) · [Hetzner](docs/deploy/hetzner.md).
 Vercel cannot run this server ([why](docs/deploy/vercel.md)).
 
-Set `MCP_GATEWAY_TOKEN` and `MCP_GATEWAY_SPEC_URL` (HTTPS OpenAPI). The image
+Set `MCP_GATEWAY_TOKEN` and `MCP_GATEWAY_SPEC_URL` (HTTPS OpenAPI; loopback HTTP is the local flow above, not this image). The image
 reads `PORT` itself (distroless, no shell). After deploy, paste
 `mcp-gateway inspect demo --client cursor` (replace the URL with your
 `https://…/mcp`) into the editor.
@@ -101,7 +115,7 @@ reads `PORT` itself (distroless, no shell). After deploy, paste
 brew install Fetch-Hive/tap/mcp-gateway
 
 # Docker (linux/amd64 and linux/arm64)
-docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.10.1 version
+docker run --rm -p 127.0.0.1:8787:8787 ghcr.io/fetch-hive/mcp-gateway:0.10.2 version
 
 # npm — wrapper plus the prebuilt binary for this machine
 npx --yes @fetch-hive/mcp-gateway version

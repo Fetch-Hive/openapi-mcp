@@ -473,7 +473,7 @@ async fn bootstrap_spec(
         }
         if url.is_none() {
             return Err(CliError::usage(format!(
-                "unknown spec '{name}'\nhint: mcp-gateway add-spec --name {name} --url HTTPS_URL\n      or set MCP_GATEWAY_SPEC_URL / pass --url to serve"
+                "unknown spec '{name}'\nhint: mcp-gateway add-spec --name {name} --url URL\n      http:// needs --insecure-http and --allow-private-networks (loopback, RFC1918, or ULA only)\n      or set MCP_GATEWAY_SPEC_URL / pass --url to serve"
             )));
         }
     } else {
