@@ -28,6 +28,13 @@ on Windows. `ProjectDirs` is called as `("com", "fetchhive", "mcp-gateway")`.
 Linux uses the application name only. macOS joins all three with dots.
 Windows uses `fetchhive\mcp-gateway`.
 
+`[log] level` defaults to `info`. `serve --tunnel` and `tunnel` draw a
+status screen unless you pass `--json` or `--quiet`. While `RUST_LOG` is
+unset and this field is `info` or empty, that screen uses the tracing
+filter `warn,rmcp=off` (the `rmcp` target is off, and info lines from this
+process are hidden). `RUST_LOG` replaces that directive. Any other level is
+used as written. See [Tunnel](tunnel.md#reconnect).
+
 `$MCP_GATEWAY_CONFIG` and `--config` override the config path.
 
 `[tunnel] relay_url` is optional. `serve --tunnel` uses

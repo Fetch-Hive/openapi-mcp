@@ -57,7 +57,7 @@ pub async fn run(
                 Err(PinError::Resolve(message)) => return Err(CliError::upstream(message)),
             };
             let cfg = load_cfg(paths)?;
-            serve::init_tracing(&cfg.log.level);
+            serve::init_tracing(&cfg.log.level, !out.json && !out.quiet);
             let probe = if no_probe {
                 None
             } else {
@@ -93,7 +93,7 @@ pub async fn run(
         }
         (None, true) if !command.is_empty() => {
             let cfg = load_cfg(paths)?;
-            serve::init_tracing(&cfg.log.level);
+            serve::init_tracing(&cfg.log.level, !out.json && !out.quiet);
             let bridge = StdioBridge::start(command.clone(), !no_probe)
                 .await
                 .map_err(CliError::upstream)?;

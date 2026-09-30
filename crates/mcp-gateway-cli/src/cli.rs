@@ -97,6 +97,12 @@ pub enum Commands {
         stdio: bool,
         /// Public anonymous URL at https://<slug>.mcp.fetchhive.com/mcp.
         /// Uses the HTTP transport; do not combine with --stdio.
+        /// A terminal prints one line per finished call: method, status,
+        /// duration, path, then the JSON-RPC method. `tools/call` also prints
+        /// the tool name. That label is omitted when the body is streamed or
+        /// the decoded body is over 64 KiB. Colors follow --color and NO_COLOR.
+        /// With no RUST_LOG and [log] level left at info, library logs use
+        /// warn,rmcp=off. RUST_LOG=info brings info logs back.
         #[arg(long, conflicts_with = "stdio")]
         tunnel: bool,
         /// Persistent hostname. Requires `mcp-gateway login`. Implies --tunnel.
@@ -128,6 +134,9 @@ pub enum Commands {
         url: Option<String>,
     },
     /// Expose any Streamable HTTP or stdio MCP server through an anonymous tunnel.
+    /// The status screen matches `serve --tunnel`: method, status, duration,
+    /// path, and JSON-RPC method. Colors follow --color and NO_COLOR. With no
+    /// RUST_LOG and [log] level left at info, library logs use warn,rmcp=off.
     Tunnel {
         /// Upstream Streamable HTTP URL, for example http://127.0.0.1:8000/mcp.
         #[arg(

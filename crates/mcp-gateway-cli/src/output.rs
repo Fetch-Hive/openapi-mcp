@@ -2,12 +2,24 @@ use crate::cli::{ColorMode, Globals};
 use serde::Serialize;
 use std::io::IsTerminal;
 
-const RESET: &str = "\x1b[0m";
-const BOLD: &str = "\x1b[1m";
-const GREEN: &str = "\x1b[32m";
-const YELLOW: &str = "\x1b[33m";
-const RED: &str = "\x1b[31m";
-const DIM: &str = "\x1b[2m";
+pub(crate) const RESET: &str = "\x1b[0m";
+pub(crate) const BOLD: &str = "\x1b[1m";
+pub(crate) const GREEN: &str = "\x1b[32m";
+pub(crate) const YELLOW: &str = "\x1b[33m";
+pub(crate) const RED: &str = "\x1b[31m";
+pub(crate) const DIM: &str = "\x1b[2m";
+pub(crate) const CYAN: &str = "\x1b[36m";
+pub(crate) const BLUE: &str = "\x1b[34m";
+pub(crate) const MAGENTA: &str = "\x1b[35m";
+pub(crate) const CYAN_UL: &str = "\x1b[36;4m";
+
+pub(crate) fn paint_code(styled: bool, code: &str, text: &str) -> String {
+    if styled && !code.is_empty() && !text.is_empty() {
+        format!("{code}{text}{RESET}")
+    } else {
+        text.to_owned()
+    }
+}
 
 pub struct Output {
     pub json: bool,
@@ -40,12 +52,16 @@ impl Output {
         }
     }
 
+    pub(crate) fn styled(&self) -> bool {
+        self.styled
+    }
+
     fn paint(&self, code: &str, text: &str) -> String {
-        if self.styled {
-            format!("{code}{text}{RESET}")
-        } else {
-            text.to_string()
-        }
+        self.paint_with(code, text)
+    }
+
+    pub(crate) fn paint_with(&self, code: &str, text: &str) -> String {
+        paint_code(self.styled, code, text)
     }
 
     pub fn bold(&self, text: &str) -> String {

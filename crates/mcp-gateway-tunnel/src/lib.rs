@@ -99,12 +99,27 @@ pub enum TunnelState {
 
 /// One proxied `/mcp` call that has finished.
 ///
+/// `path` is the path on the relay request, such as `/mcp`. It is not
+/// rewritten to the local server path.
+///
+/// `rpc` is set only when the body arrived in one frame (`body_complete`),
+/// the decoded body is at most 65536 bytes, and it is a JSON-RPC object or
+/// a batch array. The label is the `method` string. `tools/call` appends
+/// `params.name`. A batch uses the first call and appends `+N`, where `N`
+/// is the number of later entries. A streamed body, a larger body, or a
+/// method or tool name that is empty or contains a control, tab, newline,
+/// or bidi character leaves `rpc` as `None` (a bad tool name drops only the
+/// name and keeps `tools/call`). Each of those two strings is cut after 80
+/// characters and ends with `…`.
+///
 /// `status` `0` means the relay cancelled the call before the local server
 /// returned a status. `duration` is the time from accept until that finish,
 /// truncated to milliseconds by the CLI when it prints `duration_ms`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FinishedRequest {
     pub method: String,
+    pub path: String,
+    pub rpc: Option<String>,
     pub status: u16,
     pub duration: Duration,
 }

@@ -57,7 +57,7 @@ pub async fn run(
     )
     .await?;
     let cfg = load_cfg(paths)?;
-    init_tracing(&cfg.log.level);
+    init_tracing(&cfg.log.level, tunnel && !out.json && !out.quiet);
     let spec = cfg.spec(&name)?.clone();
     let handler = handler_for(
         globals,
@@ -350,12 +350,17 @@ pub(crate) fn emit_request(
     stats: &mcp_gateway_tunnel::Stats,
 ) {
     if out.json {
-        print_event(&serde_json::json!({
+        let mut value = serde_json::json!({
             "event": "request",
             "method": request.method,
+            "path": request.path,
             "status": request.status,
             "duration_ms": tunnel_screen::duration_ms(request.duration),
-        }));
+        });
+        if let Some(rpc) = &request.rpc {
+            value["rpc"] = serde_json::Value::String(rpc.clone());
+        }
+        print_event(&value);
         return;
     }
     screen.apply_request(request, stats);
@@ -415,11 +420,27 @@ pub(crate) fn loopback_authority(addr: SocketAddr) -> String {
     }
 }
 
-pub(crate) fn init_tracing(level: &str) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        let fallback = if level.is_empty() { "info" } else { level };
-        EnvFilter::new(fallback)
-    });
+/// Directive used when `RUST_LOG` is unset.
+///
+/// A tunnel status screen (`quiet_screen`) with the default `[log] level`
+/// of `info`, or an empty level, uses `warn,rmcp=off`. That drops `rmcp`
+/// entirely and hides this process's info lines, including `upstream ok`.
+/// `RUST_LOG` is applied by the caller and replaces this directive.
+/// Any other `[log] level` is used as written. `mcp request` and a
+/// successful `initialize` are `debug` even when the directive is `info`.
+pub(crate) fn tunnel_log_filter(level: &str, quiet_screen: bool) -> String {
+    if quiet_screen && (level.is_empty() || level == "info") {
+        "warn,rmcp=off".to_owned()
+    } else if level.is_empty() {
+        "info".to_owned()
+    } else {
+        level.to_owned()
+    }
+}
+
+pub(crate) fn init_tracing(level: &str, quiet_screen: bool) {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(tunnel_log_filter(level, quiet_screen)));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_writer(std::io::stderr)
@@ -540,6 +561,17 @@ mod tests {
     fn invalid_port_is_usage() {
         let err = resolve_http_bind(None, "127.0.0.1:8787", false, Some("nope")).unwrap_err();
         assert!(err.to_string().contains("PORT"));
+    }
+
+    #[test]
+    fn tunnel_screen_uses_warn_unless_level_or_rust_log_is_set() {
+        assert_eq!(tunnel_log_filter("info", true), "warn,rmcp=off");
+        assert_eq!(tunnel_log_filter("", true), "warn,rmcp=off");
+        assert_eq!(tunnel_log_filter("debug", true), "debug");
+        assert_eq!(tunnel_log_filter("warn", true), "warn");
+        assert_eq!(tunnel_log_filter("info", false), "info");
+        assert_eq!(tunnel_log_filter("", false), "info");
+        assert_eq!(tunnel_log_filter("trace", false), "trace");
     }
 
     #[test]

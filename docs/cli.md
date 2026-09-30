@@ -198,8 +198,12 @@ hostname. See [Persistent names](tunnel.md#persistent-names).
 `warning: this tunnel URL is reachable by anyone on the internet with no token`
 on stderr instead of drawing that row. The screen does not print the
 hosted-login line. `--json` emits one compact JSON object per line
-(`{"event":"tunnel",...}` and `{"event":"request","method","status","duration_ms"}`)
-and does not draw the screen. Ctrl-C exits 130 after the WebSocket closes.
+(`{"event":"tunnel",...}` and
+`{"event":"request","method","path","status","duration_ms","rpc"}`)
+and does not draw the screen. `rpc` is omitted when the body was streamed,
+larger than 65536 decoded bytes, or not a JSON-RPC call with a safe method.
+The human screen, its colors, and the default `warn,rmcp=off` log filter
+are in [Tunnel](tunnel.md#reconnect). Ctrl-C exits 130 after the WebSocket closes.
 
 `MCP_GATEWAY_RELAY_URL` overrides the relay. `[tunnel] relay_url` in
 config is the fallback. The default is

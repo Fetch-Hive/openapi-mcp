@@ -260,18 +260,28 @@ exact wait.
 {"event":"tunnel","state":"connecting"}
 {"event":"tunnel","state":"connected","url":"https://SLUG.mcp.fetchhive.com/mcp","slug":"SLUG"}
 {"event":"tunnel","state":"reconnecting","attempt":0,"delay_ms":1000}
-{"event":"request","method":"POST","status":200,"duration_ms":12}
+{"event":"request","method":"POST","path":"/mcp","status":200,"duration_ms":11,"rpc":"tools/call list_issues"}
 {"event":"tunnel","state":"rejected","code":"unauthorized","message":"…"}
 {"event":"tunnel","state":"stopped"}
 ```
 
 `attempt` matches the status row: 0 is the first retry. `delay_ms` is the
 sleep in milliseconds, truncated toward zero. `duration_ms` is the same
-truncation of the time from accept until the local call finishes. `status`
-`0` means the relay cancelled the call before the local server returned a
-status. A `429` from the in-flight cap is logged and is not included in
-`total`, because that call was refused before it ran. Every accepted call,
-including status `0`, increments `total`.
+truncation of the time from accept until the local call finishes. `path` is
+the relay request path, such as `/mcp`. It is not rewritten to the local
+server path. `rpc` is present only when the body arrived in one frame and
+the decoded body is at most 65536 bytes. It is the JSON-RPC `method`.
+`tools/call` appends `params.name`, for example `tools/call list_issues`.
+A JSON array uses the first call and appends `+N`, where `N` is the number
+of later entries. A streamed body, a larger body, a parse failure, or a
+method that is empty or contains a control character, a tab, a newline, or
+a bidi or zero-width character omits `rpc`. A tool name that fails that
+check keeps `tools/call` and drops the name. `method` and `params.name` are
+each cut after 80 characters and then end with `…`. `status` `0` means the
+relay cancelled the call before the local server returned a status. A `429`
+from the in-flight cap is logged and is not included in `total`, because
+that call was refused before it ran. Every accepted call, including status
+`0`, increments `total`.
 
 | What happened | Next dial |
 |---|---|
@@ -295,15 +305,45 @@ above), CLI version, local URL `http://127.0.0.1:<port>/mcp`, remote URL
 `anonymous, released 30 minutes after disconnect`, a blank row, and
 `Requests` with `in-flight`, `total`, and `reconnects`. When stdout is a
 terminal at least 11 rows tall and wider than the auth line, those eight
-rows stay fixed and each finished call scrolls underneath as
-`METHOD STATUS DURATION` (for example `POST    200 12ms`). A pipe, or a
-terminal that is too small, prints the eight rows once, then reprints the
-status, remote URL, and requests rows on each state change, and appends one
-request line plus a requests row after each finished call. `--json` and
-`--quiet` print none of that screen. Auth is `bearer required`, or
+rows stay fixed and each finished call scrolls underneath:
+
+```text
+POST  200  11ms  /mcp  tools/call list_issues
+POST  200   4ms  /mcp  tools/list
+```
+
+The columns are the HTTP method padded to 4, two spaces, the status padded
+to 3, one space, the duration padded to 5 (` 11ms`, `  4ms`, ` 1.2s`), two
+spaces, the relay path, then two spaces and the `rpc` label when one was
+derived. A pipe, or a terminal that is too small, prints the eight rows
+once, then reprints the status, remote URL, and requests rows on each state
+change, and appends one request line plus a requests row after each finished
+call. `--json` and `--quiet` print none of that screen. Auth is
+`bearer required`, or
 `public, this URL is reachable by anyone on the internet`. In `--json` or
 `--quiet` with `--tunnel-auth public`, stderr still prints
 `warning: this tunnel URL is reachable by anyone on the internet with no token`.
+
+On a terminal, `--color auto` (the default) colors the screen when stdout
+is a terminal and `NO_COLOR` is unset. `--color never`, `NO_COLOR`, or a
+pipe leaves it plain. `--color always` colors even a pipe. The method is
+bold. Status is green for 2xx, cyan for 3xx, yellow for other 4xx, red for
+5xx and for 429, and dim for 0 (cancelled). Duration is dim, and yellow at
+1 second or more. The path is plain. The `rpc` label is cyan, and the tool
+name after `tools/call` is bold. Session status is green for `online`,
+yellow for `connecting` and `reconnecting`, and red for `rejected` and
+`stopped`. Version is magenta. The local URL is blue. The remote URL is
+cyan and underlined. A persistent note after that URL is dim. `waiting` is
+plain. A public auth row is yellow. Header labels are dim.
+
+With no `RUST_LOG` and `[log] level` left at `info` or empty, that screen
+uses the tracing filter `warn,rmcp=off`. Logs from the `rmcp` target,
+including `serve_inner`, are off, and info lines from this process are
+hidden. `RUST_LOG` replaces the filter, so `RUST_LOG=info` brings info logs
+back. A `[log] level` other than `info` is used as written. The per-call
+`mcp request` events (`tools/list`, `tools/call`) and a successful
+`initialize` are `debug`, so they stay off at `info`. `RUST_LOG=debug`
+shows them. `--json` and `--quiet` do not switch to `warn,rmcp=off`.
 
 Frame types, close codes, and the constant list are in
 [Tunnel protocol](tunnel-protocol.md).
@@ -595,7 +635,8 @@ The header is the eight `serve --tunnel` rows plus two: `Upstream` and
 needs a terminal at least 13 rows tall and wider than the longest row. A
 generated token lives in the Auth row so the clear does not erase it.
 `--json` still prints one compact object per line for `tunnel` and
-`request` events, and does not draw the screen.
+`request` events, and does not draw the screen. Request lines use the same
+columns, colors, and `warn,rmcp=off` default as `serve --tunnel`.
 
 ## Hosted and open source
 

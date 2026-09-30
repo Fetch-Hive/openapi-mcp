@@ -82,6 +82,12 @@ mcp-gateway tunnel http://127.0.0.1:8000/mcp
 mcp-gateway tunnel --stdio -- npx -y @modelcontextprotocol/server-filesystem /tmp
 ```
 
+On a terminal, each finished call prints the HTTP method, status, duration,
+path, and the JSON-RPC method. `tools/call` also prints the tool name. That
+label is omitted when the body is streamed or larger than 64 KiB. Library
+info logs stay off that screen unless you set `RUST_LOG` or `[log] level`.
+Colors follow `--color` and `NO_COLOR`.
+
 Details: [Tunnel](docs/tunnel.md).
 
 `mcp-gateway login` is optional for an anonymous URL. It stores an `fh_cli_`

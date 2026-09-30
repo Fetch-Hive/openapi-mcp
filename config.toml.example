@@ -22,6 +22,11 @@ ttl = "168h"
 
 [log]
 file = ""
+# Default "info". `serve --tunnel` and `tunnel` draw a status screen unless
+# you pass --json or --quiet. That screen uses warn,rmcp=off when RUST_LOG
+# is unset and this value is "info" or empty, so rmcp INFO lines stay off
+# the request log. Any other value is used as written. RUST_LOG replaces it.
+# Per-call "mcp request" lines are debug.
 level = "info"
 
 # [tunnel]

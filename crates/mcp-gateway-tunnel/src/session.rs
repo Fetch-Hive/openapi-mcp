@@ -210,11 +210,7 @@ fn accept_request<S: LocalService>(
     cancels: &mut HashMap<u64, CancellationToken>,
 ) {
     if !stats.begin_request(max_inflight) {
-        let _ = requests.send(FinishedRequest {
-            method: parts.method.clone(),
-            status: 429,
-            duration: Duration::ZERO,
-        });
+        let _ = requests.send(finished(&parts, 429, Duration::ZERO));
         let _ = out_tx.try_send(Out::Text(frame_json(&too_busy(parts.id))));
         return;
     }
@@ -229,11 +225,7 @@ fn accept_request<S: LocalService>(
         Err(()) => {
             stats.end_request();
             cancels.remove(&parts.id);
-            let _ = requests.send(FinishedRequest {
-                method: parts.method.clone(),
-                status: 400,
-                duration: Duration::ZERO,
-            });
+            let _ = requests.send(finished(&parts, 400, Duration::ZERO));
             let _ = out_tx.try_send(Out::Text(frame_json(&error_response(
                 parts.id,
                 400,
@@ -248,6 +240,8 @@ fn accept_request<S: LocalService>(
     let stats = stats.clone();
     let requests = requests.clone();
     let method = parts.method.clone();
+    let path = parts.path.clone();
+    let rpc = rpc_label(&parts);
     let started = Instant::now();
     let id = parts.id;
     tokio::spawn(async move {
@@ -256,27 +250,129 @@ fn accept_request<S: LocalService>(
             done: done_tx,
             id,
         };
-        let finished = tokio::select! {
-            _ = cancel.cancelled() => FinishedRequest {
-                method,
-                status: 0,
-                duration: started.elapsed(),
-            },
+        let (status, duration) = tokio::select! {
+            _ = cancel.cancelled() => (0u16, started.elapsed()),
             response = service.call(request) => {
                 let status = response.status().as_u16();
                 if !cancel.is_cancelled() {
                     let _ = write_response(id, response, &out_tx, &cancel).await;
                 }
-                FinishedRequest {
-                    method,
-                    status,
-                    duration: started.elapsed(),
-                }
+                (status, started.elapsed())
             }
         };
         drop(guard);
-        let _ = requests.send(finished);
+        let _ = requests.send(FinishedRequest {
+            method,
+            path,
+            rpc,
+            status,
+            duration,
+        });
     });
+}
+
+fn finished(parts: &ReqParts, status: u16, duration: Duration) -> FinishedRequest {
+    FinishedRequest {
+        method: parts.method.clone(),
+        path: parts.path.clone(),
+        rpc: rpc_label(parts),
+        status,
+        duration,
+    }
+}
+
+/// Decoded JSON-RPC body kept for the request-line label. Larger bodies,
+/// and any body that arrived in more than one frame, are not parsed.
+const RPC_BODY_CAP: usize = 64 * 1024;
+/// Each of `method` and `params.name` is cut here. The cut form ends with `…`.
+const RPC_PART_CAP: usize = 80;
+
+/// Label for the status line. `None` when the body was streamed, bigger
+/// than [`RPC_BODY_CAP`] decoded bytes, or not a JSON-RPC call whose
+/// `method` passes [`is_safe_label`].
+fn rpc_label(parts: &ReqParts) -> Option<String> {
+    if !parts.body_complete {
+        return None;
+    }
+    let raw = parts.body.as_deref()?;
+    if raw.len() > rpc_b64_cap(RPC_BODY_CAP) {
+        return None;
+    }
+    let bytes = STANDARD.decode(raw).ok()?;
+    if bytes.len() > RPC_BODY_CAP {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    label_from_value(&value)
+}
+
+fn rpc_b64_cap(decoded_cap: usize) -> usize {
+    decoded_cap.div_ceil(3) * 4
+}
+
+fn label_from_value(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Array(items) => {
+            let first = label_one(items.first()?)?;
+            let extra = items.len() - 1;
+            if extra == 0 {
+                Some(first)
+            } else {
+                Some(format!("{first} +{extra}"))
+            }
+        }
+        other => label_one(other),
+    }
+}
+
+fn label_one(value: &serde_json::Value) -> Option<String> {
+    let method = value.get("method").and_then(|item| item.as_str())?;
+    if !is_safe_label(method) {
+        return None;
+    }
+    let method = bound_part(method);
+    if method == "tools/call" {
+        let name = value
+            .pointer("/params/name")
+            .and_then(|item| item.as_str())
+            .filter(|name| is_safe_label(name))
+            .map(bound_part);
+        return Some(match name {
+            Some(name) => format!("tools/call {name}"),
+            None => "tools/call".to_owned(),
+        });
+    }
+    Some(method)
+}
+
+/// Printable text. Control characters, tabs, newlines, and bidi or
+/// zero-width characters are refused. A normal space is allowed.
+fn is_safe_label(text: &str) -> bool {
+    !text.is_empty()
+        && text.chars().all(|c| {
+            if c.is_control() {
+                return false;
+            }
+            if c.is_whitespace() {
+                return c == ' ';
+            }
+            !matches!(
+                c,
+                '\u{200b}'..='\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+                    | '\u{feff}'
+            )
+        })
+}
+
+fn bound_part(text: &str) -> String {
+    if text.chars().count() <= RPC_PART_CAP {
+        return text.to_owned();
+    }
+    let mut cut: String = text.chars().take(RPC_PART_CAP).collect();
+    cut.push('…');
+    cut
 }
 
 struct InflightGuard {
@@ -553,5 +649,83 @@ impl Out {
             Self::Text(text) => Message::Text(text.into()),
             Self::Pong(payload) => Message::Pong(payload.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parts(body: Option<&str>, complete: bool) -> ReqParts {
+        ReqParts {
+            id: 1,
+            method: "POST".into(),
+            path: "/mcp".into(),
+            query: None,
+            headers: Vec::new(),
+            body_complete: complete,
+            body: body.map(|text| STANDARD.encode(text)),
+        }
+    }
+
+    #[test]
+    fn tools_call_label_includes_the_tool_name() {
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_issues","arguments":{}}}"#;
+        assert_eq!(
+            rpc_label(&parts(Some(body), true)).as_deref(),
+            Some("tools/call list_issues")
+        );
+    }
+
+    #[test]
+    fn other_methods_keep_the_method_alone() {
+        let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#;
+        assert_eq!(
+            rpc_label(&parts(Some(body), true)).as_deref(),
+            Some("tools/list")
+        );
+    }
+
+    #[test]
+    fn batch_shows_the_first_call_and_the_rest_count() {
+        let body = r#"[{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_issues"}},{"jsonrpc":"2.0","id":2,"method":"tools/list"},{"jsonrpc":"2.0","id":3,"method":"ping"}]"#;
+        assert_eq!(
+            rpc_label(&parts(Some(body), true)).as_deref(),
+            Some("tools/call list_issues +2")
+        );
+    }
+
+    #[test]
+    fn streamed_or_unsafe_or_huge_bodies_have_no_label() {
+        let call =
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_issues"}}"#;
+        assert_eq!(rpc_label(&parts(Some(call), false)), None);
+        assert_eq!(
+            rpc_label(&parts(
+                Some(r#"{"jsonrpc":"2.0","id":1,"method":"tools/call\n"}"#),
+                true
+            )),
+            None
+        );
+        let named =
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"bad\nname"}}"#;
+        assert_eq!(
+            rpc_label(&parts(Some(named), true)).as_deref(),
+            Some("tools/call")
+        );
+        let mut huge = String::from(r#"{"jsonrpc":"2.0","id":1,"method":"ping","pad":""#);
+        huge.push_str(&"x".repeat(RPC_BODY_CAP));
+        huge.push_str(r#""}"#);
+        assert_eq!(rpc_label(&parts(Some(&huge), true)), None);
+        assert_eq!(rpc_label(&parts(Some("not json"), true)), None);
+    }
+
+    #[test]
+    fn long_method_is_cut_at_eighty_characters() {
+        let method = "a".repeat(90);
+        let body = format!(r#"{{"jsonrpc":"2.0","id":1,"method":"{method}"}}"#);
+        let label = rpc_label(&parts(Some(&body), true)).unwrap();
+        assert_eq!(label.chars().count(), RPC_PART_CAP + 1);
+        assert!(label.ends_with('…'));
     }
 }

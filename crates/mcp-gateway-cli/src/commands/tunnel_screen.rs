@@ -4,14 +4,17 @@
 //! the longest header line, pins the header with DECSTBM and scrolls request
 //! lines under it. `serve --tunnel` has eight header rows. `tunnel` inserts
 //! extra rows between Auth and Lease. Any other stdout gets the same lines as
-//! normal text. `--json` and `--quiet` draw nothing here.
+//! normal text. `--json` and `--quiet` draw nothing here. A finished call
+//! prints `METHOD  STATUS DURATION  PATH  RPC`.
 
 use mcp_gateway_tunnel::{FinishedRequest, Stats, TunnelState};
 use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use crate::output::Output;
+use crate::output::{
+    paint_code, Output, BLUE, BOLD, CYAN, CYAN_UL, DIM, GREEN, MAGENTA, RED, RESET, YELLOW,
+};
 
 pub const HEADER_ROWS: u16 = 8;
 const LABEL_WIDTH: usize = 16;
@@ -47,6 +50,7 @@ pub struct TunnelScreen {
     lease: String,
     extras: Vec<(String, String)>,
     status: String,
+    styled: bool,
 }
 
 impl TunnelScreen {
@@ -76,6 +80,7 @@ impl TunnelScreen {
             lease: LEASE.to_owned(),
             extras,
             status: status_text(&TunnelState::Connecting),
+            styled: out.styled(),
         };
         if out.json || out.quiet {
             return screen;
@@ -118,7 +123,24 @@ impl TunnelScreen {
         if self.mode == Mode::Off {
             return;
         }
-        let line = request_line(&request.method, request.status, request.duration);
+        let line = if self.styled {
+            paint_request_line(
+                true,
+                &request.method,
+                request.status,
+                request.duration,
+                &request.path,
+                request.rpc.as_deref(),
+            )
+        } else {
+            request_line(
+                &request.method,
+                request.status,
+                request.duration,
+                &request.path,
+                request.rpc.as_deref(),
+            )
+        };
         match self.mode {
             Mode::Pinned { .. } => {
                 let mut buf = line;
@@ -204,7 +226,7 @@ impl TunnelScreen {
             .iter()
             .map(|(label, value)| (label.as_str(), value.as_str()))
             .collect::<Vec<_>>();
-        screen_lines(
+        let lines = screen_lines(
             &HeaderView {
                 status: self.status.clone(),
                 version: self.version.clone(),
@@ -217,7 +239,14 @@ impl TunnelScreen {
                 reconnects: stats.reconnects.load(Ordering::SeqCst),
             },
             &extras,
-        )
+        );
+        if !self.styled {
+            return lines;
+        }
+        lines
+            .into_iter()
+            .map(|line| color_header_line(&line))
+            .collect()
     }
 }
 
@@ -272,8 +301,132 @@ pub fn status_text(state: &TunnelState) -> String {
     }
 }
 
-pub fn request_line(method: &str, status: u16, duration: Duration) -> String {
-    format!("{method:<7} {status:>3} {}", format_delay(duration))
+pub fn request_line(
+    method: &str,
+    status: u16,
+    duration: Duration,
+    path: &str,
+    rpc: Option<&str>,
+) -> String {
+    paint_request_line(false, method, status, duration, path, rpc)
+}
+
+pub fn paint_request_line(
+    styled: bool,
+    method: &str,
+    status: u16,
+    duration: Duration,
+    path: &str,
+    rpc: Option<&str>,
+) -> String {
+    let method_col = format!("{method:<4}");
+    let status_col = format!("{status:>3}");
+    let dur_col = format!("{:>5}", format_delay(duration));
+    let method_col = paint_code(styled, BOLD, &method_col);
+    let status_col = paint_code(styled, status_color(status), &status_col);
+    let dur_code = if duration >= Duration::from_secs(1) {
+        YELLOW
+    } else {
+        DIM
+    };
+    let dur_col = paint_code(styled, dur_code, &dur_col);
+    let mut line = format!("{method_col}  {status_col} {dur_col}  {path}");
+    if let Some(rpc) = rpc.filter(|label| !label.is_empty()) {
+        line.push_str("  ");
+        line.push_str(&paint_rpc(styled, rpc));
+    }
+    line
+}
+
+fn status_color(status: u16) -> &'static str {
+    match status {
+        0 => DIM,
+        429 => RED,
+        200..=299 => GREEN,
+        300..=399 => CYAN,
+        400..=499 => YELLOW,
+        500..=599 => RED,
+        _ => "",
+    }
+}
+
+fn paint_rpc(styled: bool, rpc: &str) -> String {
+    const PREFIX: &str = "tools/call ";
+    let Some(rest) = rpc.strip_prefix(PREFIX) else {
+        return paint_code(styled, CYAN, rpc);
+    };
+    let (name, extra) = batch_suffix(rest);
+    if name.is_empty() {
+        return paint_code(styled, CYAN, rpc);
+    }
+    if !styled {
+        return rpc.to_owned();
+    }
+    // `\x1b[1m` sets bold and leaves the cyan from the prefix in place.
+    let mut line = format!("{CYAN}{PREFIX}{BOLD}{name}{RESET}");
+    if !extra.is_empty() {
+        line.push_str(&paint_code(true, CYAN, extra));
+    }
+    line
+}
+
+/// Split `list_issues +2` into the tool name and the ` +N` batch suffix.
+fn batch_suffix(rest: &str) -> (&str, &str) {
+    let Some(idx) = rest.rfind(" +") else {
+        return (rest, "");
+    };
+    let suffix = &rest[idx + 2..];
+    if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
+        return (rest, "");
+    }
+    (&rest[..idx], &rest[idx..])
+}
+
+fn color_header_line(line: &str) -> String {
+    if line.is_empty() {
+        return String::new();
+    }
+    let mut chars = line.chars();
+    let label: String = chars.by_ref().take(LABEL_WIDTH).collect();
+    let value: String = chars.collect();
+    let painted = color_header_value(label.trim_end(), &value);
+    format!("{}{painted}", paint_code(true, DIM, &label))
+}
+
+fn color_header_value(label: &str, value: &str) -> String {
+    match label {
+        "Session status" => {
+            let code = if value == "online" {
+                GREEN
+            } else if value == "stopped" || value.starts_with("rejected") {
+                RED
+            } else if value == "connecting" || value.starts_with("reconnecting") {
+                YELLOW
+            } else {
+                return value.to_owned();
+            };
+            paint_code(true, code, value)
+        }
+        "Version" => paint_code(true, MAGENTA, value),
+        "Local URL" => paint_code(true, BLUE, value),
+        "Remote URL" => paint_remote(value),
+        "Auth" if value.starts_with("public") => paint_code(true, YELLOW, value),
+        _ => value.to_owned(),
+    }
+}
+
+fn paint_remote(value: &str) -> String {
+    let url_end = value.find(char::is_whitespace).unwrap_or(value.len());
+    let (url, rest) = value.split_at(url_end);
+    if url.starts_with("http://") || url.starts_with("https://") {
+        format!(
+            "{}{}",
+            paint_code(true, CYAN_UL, url),
+            paint_code(true, DIM, rest)
+        )
+    } else {
+        value.to_owned()
+    }
 }
 
 pub fn format_delay(duration: Duration) -> String {
@@ -397,15 +550,100 @@ mod tests {
     }
 
     #[test]
-    fn request_line_is_method_status_and_duration() {
+    fn request_line_is_method_status_duration_path_and_rpc() {
         assert_eq!(
-            request_line("POST", 200, Duration::from_millis(12)),
-            "POST    200 12ms"
+            request_line(
+                "POST",
+                200,
+                Duration::from_millis(11),
+                "/mcp",
+                Some("tools/call list_issues")
+            ),
+            "POST  200  11ms  /mcp  tools/call list_issues"
         );
         assert_eq!(
-            request_line("GET", 0, Duration::from_millis(5)),
-            "GET       0 5ms"
+            request_line(
+                "POST",
+                200,
+                Duration::from_millis(4),
+                "/mcp",
+                Some("tools/list")
+            ),
+            "POST  200   4ms  /mcp  tools/list"
         );
+        assert_eq!(
+            request_line("GET", 0, Duration::from_millis(5), "/mcp", None),
+            "GET     0   5ms  /mcp"
+        );
+    }
+
+    #[test]
+    fn request_line_colors_follow_status_and_leave_plain_text_when_unstyled() {
+        let plain = request_line(
+            "POST",
+            200,
+            Duration::from_millis(11),
+            "/mcp",
+            Some("tools/call list_issues"),
+        );
+        let colored = paint_request_line(
+            true,
+            "POST",
+            200,
+            Duration::from_millis(11),
+            "/mcp",
+            Some("tools/call list_issues"),
+        );
+        assert_eq!(visible(&colored), plain);
+        assert!(colored.contains("\x1b[1mPOST\x1b[0m"));
+        assert!(colored.contains("\x1b[32m200\x1b[0m"));
+        assert!(colored.contains("\x1b[2m 11ms\x1b[0m"));
+        assert!(colored.contains("\x1b[36mtools/call \x1b[1mlist_issues\x1b[0m"));
+        let slow = paint_request_line(true, "POST", 429, Duration::from_millis(1200), "/mcp", None);
+        assert!(slow.contains("\x1b[31m429\x1b[0m"));
+        assert!(slow.contains("\x1b[33m 1.2s\x1b[0m"));
+        let cancelled = paint_request_line(true, "GET", 0, Duration::from_millis(5), "/mcp", None);
+        assert!(cancelled.contains("\x1b[2m  0\x1b[0m"));
+    }
+
+    #[test]
+    fn header_colors_do_not_change_the_visible_row() {
+        let plain = header_lines(&sample());
+        let online = color_header_line(&plain[0]);
+        assert_eq!(visible(&online), plain[0]);
+        assert!(online.contains("\x1b[32monline\x1b[0m"));
+        let remote = color_header_line(&plain[3]);
+        assert_eq!(visible(&remote), plain[3]);
+        assert!(remote.contains("\x1b[36;4mhttps://abcd2345.mcp.fetchhive.com/mcp\x1b[0m"));
+        let version = color_header_line(&plain[1]);
+        assert!(version.contains("\x1b[35m0.7.1\x1b[0m"));
+        let local = color_header_line(&plain[2]);
+        assert!(local.contains("\x1b[34mhttp://127.0.0.1:8787/mcp\x1b[0m"));
+        let mut view = sample();
+        view.status = "connecting".to_owned();
+        view.auth = auth_value(true).to_owned();
+        let lines = header_lines(&view);
+        assert!(color_header_line(&lines[0]).contains("\x1b[33mconnecting\x1b[0m"));
+        assert!(color_header_line(&lines[4]).contains("\x1b[33mpublic,"));
+        view.status = "stopped".to_owned();
+        assert!(color_header_line(&header_lines(&view)[0]).contains("\x1b[31mstopped\x1b[0m"));
+    }
+
+    fn visible(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\u{1b}' {
+                for next in chars.by_ref() {
+                    if next == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(ch);
+            }
+        }
+        out
     }
 
     #[test]

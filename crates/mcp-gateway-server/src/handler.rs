@@ -15,7 +15,7 @@ use rmcp::RoleServer;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -210,7 +210,7 @@ impl ServerHandler for GatewayHandler {
             .and_then(|c| c.parse::<usize>().ok())
             .unwrap_or(0);
         let ops: Vec<&Operation> = self.gateway.operations().collect();
-        info!(method = "tools/list", tools = ops.len(), "mcp request");
+        debug!(method = "tools/list", tools = ops.len(), "mcp request");
         let end = (start + PAGE_SIZE).min(ops.len());
         let page = ops[start.min(ops.len())..end]
             .iter()
@@ -232,7 +232,7 @@ impl ServerHandler for GatewayHandler {
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, McpError> {
         let arguments = Value::Object(request.arguments.unwrap_or_default());
-        info!(method = "tools/call", tool = %request.name, "mcp request");
+        debug!(method = "tools/call", tool = %request.name, "mcp request");
         let mapped = self.execute_named(&request.name, arguments).await;
         Ok(tool_result_to_mcp(&mapped).into())
     }
@@ -255,7 +255,7 @@ impl ServerHandler for GatewayHandler {
                 "initialize: unknown protocol version, falling back"
             );
         }
-        info!(
+        debug!(
             client = %request.client_info.name,
             protocol = %info.protocol_version,
             "initialize"

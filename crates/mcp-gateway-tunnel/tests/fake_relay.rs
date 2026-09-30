@@ -183,6 +183,8 @@ async fn inline_body_is_forwarded_with_loopback_host() {
         .expect("request log")
         .expect("finished request");
     assert_eq!(finished.method, "POST");
+    assert_eq!(finished.path, MCP_PATH);
+    assert_eq!(finished.rpc.as_deref(), Some("ping"));
     assert_eq!(finished.status, 200);
     assert_eq!(
         handle.stats.total.load(std::sync::atomic::Ordering::SeqCst),
