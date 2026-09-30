@@ -411,6 +411,7 @@ fn color_header_value(label: &str, value: &str) -> String {
         "Local URL" => paint_code(true, BLUE, value),
         "Remote URL" => paint_remote(value),
         "Auth" if value.starts_with("public") => paint_code(true, YELLOW, value),
+        "SSRF" => paint_code(true, YELLOW, value),
         _ => value.to_owned(),
     }
 }
@@ -627,6 +628,9 @@ mod tests {
         assert!(color_header_line(&lines[4]).contains("\x1b[33mpublic,"));
         view.status = "stopped".to_owned();
         assert!(color_header_line(&header_lines(&view)[0]).contains("\x1b[31mstopped\x1b[0m"));
+        let ssrf = row("SSRF", "private networks allowed; metadata still denied");
+        assert!(color_header_line(&ssrf).contains("\x1b[33mprivate networks allowed"));
+        assert_eq!(visible(&color_header_line(&ssrf)), ssrf);
     }
 
     fn visible(text: &str) -> String {

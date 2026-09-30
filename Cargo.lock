@@ -1433,7 +1433,7 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mcp-gateway-cli"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -1469,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-compile"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "hex",
  "jsonschema",
@@ -1489,7 +1489,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-ir"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "schemars",
  "serde",
@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-proxy"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "aes-gcm",
  "async-trait",
@@ -1535,7 +1535,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-server"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-tunnel"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1588,7 +1588,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-tunnel-proto"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "schemars",
  "serde",
@@ -1598,7 +1598,7 @@ dependencies = [
 
 [[package]]
 name = "mcp-gateway-upsell"
-version = "0.11.0"
+version = "0.11.1"
 
 [[package]]
 name = "memchr"

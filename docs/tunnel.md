@@ -303,9 +303,16 @@ rows: session status (`connecting`, `online`, or the reconnecting line
 above), CLI version, local URL `http://127.0.0.1:<port>/mcp`, remote URL
 (or `waiting` until `Welcome`), auth, the lease line
 `anonymous, released 30 minutes after disconnect`, a blank row, and
-`Requests` with `in-flight`, `total`, and `reconnects`. When stdout is a
-terminal at least 11 rows tall and wider than the auth line, those eight
-rows stay fixed and each finished call scrolls underneath:
+`Requests` with `in-flight`, `total`, and `reconnects`. With
+`--allow-private-networks`, an `SSRF` row is inserted between Auth and
+Lease and reads `private networks allowed; metadata still denied`. On a
+color terminal that value is yellow. That makes nine header rows, so the
+pin needs a terminal at least 12 rows tall. `--json` and `--quiet` do not
+draw the row; they print
+`warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback.`
+on stderr instead. When stdout is a terminal at least 11 rows tall (12 with
+the SSRF row) and wider than the longest header line, those rows stay
+fixed and each finished call scrolls underneath:
 
 ```text
 POST  200  11ms  /mcp  tools/call list_issues

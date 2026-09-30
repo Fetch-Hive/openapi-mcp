@@ -236,24 +236,23 @@ pub async fn run(
         stats,
         ..
     } = handle;
+    let mut extras = Vec::new();
+    if allow_private {
+        extras.push(("SSRF", "private networks allowed; metadata still denied"));
+    }
     let mut screen = TunnelScreen::open(
         out,
         env!("CARGO_PKG_VERSION"),
         &tunnel_screen::local_http_url(&authority, &path),
         tunnel_auth == TunnelAuth::Public,
         None,
-        &[],
+        &extras,
         &stats,
     );
     if let Some(session) = &named {
         screen = screen.persistent(&session.label);
     }
     let mut reserved_announced = false;
-    if allow_private && !out.json && !out.quiet {
-        eprintln!(
-            "warning: --allow-private-networks is on; this process can reach RFC1918, ULA, and loopback."
-        );
-    }
     let mut interrupted = false;
     let mut requests_open = true;
     loop {
