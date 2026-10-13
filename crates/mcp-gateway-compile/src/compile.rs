@@ -161,3 +161,113 @@ pub fn compile_loaded(
 pub fn compile_path(path: impl AsRef<std::path::Path>) -> Result<CompileBundle, CompileError> {
     compile(SpecSource::File(path.as_ref().to_path_buf()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::loader::load_bytes;
+    use serde_json::json;
+
+    #[test]
+    fn response_ref_keeps_component_defs_on_the_output_schema() {
+        let spec = r##"
+openapi: 3.0.3
+info:
+  title: Pets
+  version: "1.0.0"
+servers:
+  - url: https://example.com
+paths:
+  /pets:
+    get:
+      operationId: findPets
+      responses:
+        "200":
+          description: A list of pets.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pet"
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: One pet by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          $ref: "#/components/schemas/Category"
+    Category:
+      type: object
+      properties:
+        name:
+          type: string
+"##;
+        let loaded =
+            load_bytes(spec.as_bytes().to_vec(), SourceKind::Stdin, "pets.yaml").expect("load");
+        let bundle = compile_loaded(&loaded, CompileOptions::default()).expect("compile");
+        let find = operation(&bundle, "/pets");
+        let get = operation(&bundle, "/pets/{petId}");
+        for op in [find, get] {
+            let schema = op.tool.output_schema.as_ref().expect("output schema");
+            let defs = schema
+                .get("$defs")
+                .and_then(serde_json::Value::as_object)
+                .expect("output schema keeps $defs");
+            assert!(defs.contains_key("Pet"), "{schema}");
+            assert!(defs.contains_key("Category"), "{schema}");
+            jsonschema::options()
+                .build(schema)
+                .expect("output schema builds");
+        }
+
+        let pet = get.tool.output_schema.as_ref().unwrap();
+        assert!(valid(
+            pet,
+            &json!({"id": 1, "name": "doggie", "category": {"name": "Dogs"}})
+        ));
+        assert!(!valid(pet, &json!({"id": 1})));
+
+        let list = find.tool.output_schema.as_ref().unwrap();
+        assert!(valid(list, &json!([{"name": "doggie"}])));
+        assert!(!valid(list, &json!([{"id": 1}])));
+    }
+
+    fn operation<'a>(bundle: &'a CompileBundle, path: &str) -> &'a Operation {
+        bundle
+            .api
+            .operations
+            .iter()
+            .find(|op| op.source.path_template == path)
+            .unwrap_or_else(|| panic!("missing {path}"))
+    }
+
+    fn valid(schema: &serde_json::Value, instance: &serde_json::Value) -> bool {
+        jsonschema::options()
+            .build(schema)
+            .expect("schema builds")
+            .validate(instance)
+            .is_ok()
+    }
+}

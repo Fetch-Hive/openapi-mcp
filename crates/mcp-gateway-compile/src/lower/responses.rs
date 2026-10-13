@@ -71,6 +71,16 @@ pub fn lower_responses(
             },
         );
     }
+    // `apply_bundle` hoists `$defs` into `defs` and leaves `#/$defs/...` refs
+    // in the schema. Those refs only resolve when the definitions travel with
+    // the output document.
+    if !defs.is_empty() {
+        for body in out.values_mut() {
+            if let Some(schema) = body.schema.as_mut() {
+                super::schema::graft_defs(schema, &defs);
+            }
+        }
+    }
     let output = ["200", "201"]
         .into_iter()
         .chain(

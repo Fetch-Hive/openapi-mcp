@@ -76,6 +76,30 @@ pub fn flatten_allof(schema: &mut Value) -> bool {
     false
 }
 
+/// Put hoisted component schemas back on a schema document.
+///
+/// `hoist_defs` lifts `$defs` into a side map so input schemas can share
+/// them. A response schema that still says `#/$defs/Pet` has to carry those
+/// definitions itself, or output validation cannot resolve the ref.
+pub fn graft_defs(schema: &mut Value, defs: &Map<String, Value>) {
+    if defs.is_empty() {
+        return;
+    }
+    let Some(map) = schema.as_object_mut() else {
+        return;
+    };
+    match map.get_mut("$defs") {
+        Some(Value::Object(existing)) => {
+            for (key, value) in defs {
+                existing.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+        _ => {
+            map.insert("$defs".into(), Value::Object(defs.clone()));
+        }
+    }
+}
+
 pub fn hoist_defs(schema: &mut Value, sink: &mut Map<String, Value>) {
     match schema {
         Value::Object(map) => {
