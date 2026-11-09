@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync the workspace version, GHCR image pins, and the npm wrapper version.
+# Sync the workspace version, GHCR image pins, the npm wrapper version, and server.json.
 # Run before you commit a release.
 #
 #   ./scripts/bump-version.sh 0.5.0
@@ -127,12 +127,21 @@ for name in npm.get("optionalDependencies", {}):
 new_npm = json.dumps(npm, indent=2) + "\n"
 old_npm = npm_path.read_text()
 
+server_path = root / "server.json"
+server = json.loads(server_path.read_text())
+server["version"] = new
+for pkg in server.get("packages", []):
+    pkg["version"] = new
+new_server = json.dumps(server, indent=2) + "\n"
+old_server = server_path.read_text()
+
 print(f"workspace {old} -> {new}")
 print(f"Cargo.lock workspace crates rewritten: {changed_lock}")
 for path, body, updated in image_updates:
     n = 0 if body == updated else body.count("ghcr.io/fetch-hive/mcp-gateway:")
     print(f"  {path.relative_to(root)}: {n} image pin(s)")
 print(f"  npm/package.json: {npm['version']}")
+print(f"  server.json: {server['version']}")
 
 if dry:
     print("dry-run: no files written")
@@ -147,6 +156,8 @@ for path, body, updated in image_updates:
         path.write_text(updated)
 if new_npm != old_npm:
     npm_path.write_text(new_npm)
+if new_server != old_server:
+    server_path.write_text(new_server)
 PY
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
