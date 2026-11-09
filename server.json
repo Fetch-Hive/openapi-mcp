@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://www.fetchhive.com/mcp",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@fetch-hive/mcp-gateway",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "transport": {
         "type": "stdio"
       },
