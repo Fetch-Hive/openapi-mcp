@@ -2,12 +2,16 @@
 
 _An open-source project by [Fetch Hive](https://fetchhive.com)._
 
-**OpenAPI to MCP.** Connect your API to Cursor, Codex, Claude Code, VS Code,
-ChatGPT, or any MCP client — in minutes.
+**OpenAPI to MCP, with a tunnel.** Turn an OpenAPI spec, or an MCP server
+already running on your machine, into an MCP endpoint any client can call:
+Cursor, Codex, Claude Code, VS Code, ChatGPT, Claude, or any MCP client.
 
-That means a **live** API, and it also means the API on your laptop: a WIP
-branch, `localhost:3000`, a Docker compose stack. Point the editor at the
-gateway and call the same tools you will ship.
+- **Live API or localhost.** Compile a public spec, or the API on your laptop:
+  a WIP branch, `localhost:3000`, a Docker compose stack.
+- **Public HTTPS URL, no inbound port.** Add `--tunnel` and remote clients get
+  `https://<name>.mcp.fetchhive.com/mcp` while your process stays on loopback.
+- **Safe defaults.** Loopback bind, bearer token required, SSRF-hardened
+  outbound dialer.
 
 Prefer a hosted MCP Gateway with tokens, quotas, and a dashboard?
 https://fetchhive.com/mcp
