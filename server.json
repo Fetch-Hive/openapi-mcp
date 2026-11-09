@@ -3,22 +3,43 @@
   "name": "io.github.fetch-hive/mcp-gateway",
   "title": "mcp-gateway (OpenAPI to MCP)",
   "description": "OpenAPI or local API to MCP server, with a public HTTPS tunnel. Rust CLI, any MCP client.",
-  "repository": { "url": "https://github.com/Fetch-Hive/openapi-mcp", "source": "github" },
+  "repository": {
+    "url": "https://github.com/Fetch-Hive/openapi-mcp",
+    "source": "github"
+  },
   "websiteUrl": "https://www.fetchhive.com/mcp",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@fetch-hive/mcp-gateway",
-      "version": "0.11.2",
-      "transport": { "type": "stdio" },
+      "version": "0.11.3",
+      "transport": {
+        "type": "stdio"
+      },
       "packageArguments": [
-        { "type": "positional", "valueHint": "serve" },
-        { "type": "positional", "valueHint": "spec_name", "isRequired": true, "description": "Name of a spec added earlier with: mcp-gateway add-spec" },
-        { "type": "named", "name": "--stdio" }
+        {
+          "type": "positional",
+          "valueHint": "serve"
+        },
+        {
+          "type": "positional",
+          "valueHint": "spec_name",
+          "isRequired": true,
+          "description": "Name of a spec added earlier with: mcp-gateway add-spec"
+        },
+        {
+          "type": "named",
+          "name": "--stdio"
+        }
       ],
       "environmentVariables": [
-        { "name": "MCP_GATEWAY_TOKEN", "description": "Bearer token printed once by mcp-gateway init", "isRequired": true, "isSecret": true }
+        {
+          "name": "MCP_GATEWAY_TOKEN",
+          "description": "Bearer token printed once by mcp-gateway init",
+          "isRequired": true,
+          "isSecret": true
+        }
       ]
     }
   ]
