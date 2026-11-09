@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.fetch-hive/mcp-gateway",
+  "name": "io.github.Fetch-Hive/mcp-gateway",
   "title": "mcp-gateway (OpenAPI to MCP)",
   "description": "OpenAPI or local API to MCP server, with a public HTTPS tunnel. Rust CLI, any MCP client.",
   "repository": {
