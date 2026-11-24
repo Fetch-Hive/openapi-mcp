@@ -1,5 +1,7 @@
 # mcp-gateway
 
+[![Fetch-Hive/openapi-mcp MCP server](https://glama.ai/mcp/servers/Fetch-Hive/openapi-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Fetch-Hive/openapi-mcp)
+
 _An open-source project by [Fetch Hive](https://fetchhive.com)._
 
 **OpenAPI to MCP, with a tunnel.** Turn an OpenAPI spec, or an MCP server
